@@ -1,11 +1,18 @@
-﻿<#
+<#
 .SYNOPSIS
-    Usuwa xpp-graft: wpisy MCP w Claude, a opcjonalnie indeks i pliki programu.
+    Removes xpp-graft: the MCP entries in Claude and, optionally, the index and program files.
+
+.DESCRIPTION
+    Only MCP entries that point to this installation are removed. The index location is read
+    from the configuration (by default %LOCALAPPDATA%\xpp-graft\index); only the index files
+    (xpp.db*) are deleted, never other content of that folder. Source code and build outputs
+    found in the installation folder (src, dist, build, *.cs, *.csproj) are left untouched.
+    Nothing in PackagesLocalDirectory is ever modified.
 
 .EXAMPLE
-    .\uninstall.ps1              # wyrejestrowanie + pytanie o usuniecie plikow
+    .\uninstall.ps1              # unregister + ask before deleting files
 .EXAMPLE
-    .\uninstall.ps1 -All -Force  # usuwa wszystko bez pytania
+    .\uninstall.ps1 -All -Force  # delete everything without asking
 #>
 [CmdletBinding()]
 param(
@@ -17,29 +24,58 @@ param(
 
 $ErrorActionPreference = 'Stop'
 function Say($m) { Write-Host "  $m" }
-Write-Host "`nUsuwanie xpp-graft z $InstallDir" -ForegroundColor Cyan
+function Confirm-Step($question) {
+    if ($All -or $Force) { return $true }
+    return (Read-Host "  $question [y/N]") -match '^[yYtT]'
+}
+Write-Host "`nRemoving xpp-graft from $InstallDir" -ForegroundColor Cyan
 
 $exe = Join-Path $InstallDir 'bin\xppgraft.exe'
-if (Test-Path $exe) { & $exe unregister } else { Say "brak $exe - pomijam wyrejestrowanie" }
 
-Get-CimInstance Win32_Process -Filter "Name='xppgraft.exe'" | ForEach-Object {
-    Say "zatrzymuje proces xppgraft (PID $($_.ProcessId))"
-    Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+# Find the index before the program is removed: the configuration knows where it lives.
+$indexFolders = @()
+if (Test-Path $exe) {
+    $line = & $exe config 2>$null | Where-Object { $_ -match '^indexPath:' } | Select-Object -First 1
+    if ($line) {
+        $indexPath = ($line -replace '^indexPath:\s*', '').Trim()
+        if ($indexPath) { $indexFolders += Split-Path $indexPath -Parent }
+    }
 }
+# The default %LOCALAPPDATA% index may be shared by other installations of this user:
+# consider it only when the configuration could not be read.
+if ($indexFolders.Count -eq 0) { $indexFolders += Join-Path $env:LOCALAPPDATA 'xpp-graft\index' }
+$indexFolders += Join-Path $InstallDir 'index'                    # older installations
+$indexFolders = @($indexFolders | Select-Object -Unique | Where-Object { Test-Path (Join-Path $_ 'xpp.db*') })
+
+if (Test-Path $exe) { & $exe unregister } else { Say "$exe not found - skipping unregistration" }
+
+$target = [IO.Path]::GetFullPath($InstallDir).TrimEnd('\') + '\'
+Get-CimInstance Win32_Process -Filter "Name='xppgraft.exe'" |
+    Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($target, [StringComparison]::OrdinalIgnoreCase) } |
+    ForEach-Object {
+        Say "stopping xppgraft process (PID $($_.ProcessId))"
+        Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+    }
 Start-Sleep -Milliseconds 500
 
-$index = Join-Path $InstallDir 'index'
-if (-not $KeepIndex -and (Test-Path $index)) {
-    $size = [math]::Round((Get-ChildItem $index -Recurse -File | Measure-Object Length -Sum).Sum / 1MB)
-    if ($All -or $Force -or (Read-Host "  Usunac indeks ($size MB)? [t/N]") -match '^[tTyY]') {
-        Remove-Item $index -Recurse -Force
-        Say "usunieto indeks"
+if (-not $KeepIndex) {
+    foreach ($folder in $indexFolders) {
+        $files = @(Get-ChildItem $folder -Filter 'xpp.db*' -File)
+        $size = [math]::Round(($files | Measure-Object Length -Sum).Sum / 1MB)
+        if (Confirm-Step "Delete the index in $folder ($size MB)?") {
+            $files | Remove-Item -Force
+            Say "index deleted: $folder"
+            # Remove the folders only when nothing else is left in them.
+            foreach ($d in @($folder, (Split-Path $folder -Parent))) {
+                if ((Test-Path $d) -and -not (Get-ChildItem $d -Force)) { Remove-Item $d -Force }
+            }
+        }
     }
 }
 
-if ($All -or $Force -or (Read-Host "  Usunac pliki programu z $InstallDir? [t/N]") -match '^[tTyY]') {
+if (Confirm-Step "Delete the program files in $InstallDir?") {
     $self = $MyInvocation.MyCommand.Path
-    # Kod zrodlowy i wlasne pliki uzytkownika zostaja nietkniete - kasujemy tylko to, co instalator wgral.
+    # Source code and user content stay untouched - only what the installer put there is removed.
     $keep = @('src', 'dist', 'build', 'build.ps1', 'pack.ps1', 'nuget.config')
     $skipped = @()
     foreach ($item in Get-ChildItem $InstallDir -Force) {
@@ -50,8 +86,8 @@ if ($All -or $Force -or (Read-Host "  Usunac pliki programu z $InstallDir? [t/N]
         }
         Remove-Item $item.FullName -Recurse -Force -ErrorAction SilentlyContinue
     }
-    Say "usunieto pliki programu (ten skrypt zostaje - skasuj katalog recznie)"
-    if ($skipped.Count) { Say "pominieto (kod/wyniki budowy): $($skipped -join ', ')" }
+    Say "program files deleted (this script stays - delete the folder manually)"
+    if ($skipped.Count) { Say "left in place (source / build outputs): $($skipped -join ', ')" }
 }
 
-Write-Host "`nGotowe. Zadne pliki w PackagesLocalDirectory nie byly zmieniane." -ForegroundColor Cyan
+Write-Host "`nDone. No files in PackagesLocalDirectory were changed." -ForegroundColor Cyan

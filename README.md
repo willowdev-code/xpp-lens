@@ -1,202 +1,205 @@
-# xpp-graft — indeks kodu X++ (D365 F&O) jako serwer MCP
+# xpp-graft — X++ (D365 F&O) code index as an MCP server
 
-Czyta `PackagesLocalDirectory` **tylko do odczytu** i buduje własny indeks (SQLite) poza repozytorium AOS.
-Claude korzysta z niego przez MCP zamiast czytać wielkie pliki XML z AOT.
+**English** | [Polski](README.pl.md)
 
-© 2026 WillowDev. Udostępnione na [licencji MIT](LICENSE).
+Reads `PackagesLocalDirectory` **read-only** and builds its own index (SQLite) outside the AOS repository.
+Claude uses it over MCP instead of reading huge AOT XML files.
 
-## Instalacja na nowej maszynie
+© 2026 WillowDev. Released under the [MIT License](LICENSE).
 
-Paczki instalacyjnej nie ma w repozytorium (`dist\` jest pomijany przez `.gitignore`). Są dwie drogi:
+## Installing on a new machine
 
-**A. Z gotowej paczki** — na maszynie docelowej nie trzeba niczego instalować, nawet .NET.
+The install package is not part of the repository (`dist\` is excluded by `.gitignore`). There are two ways:
 
-1. Pobierz `xpp-graft-RRRRMMDD.zip` z zakładki **Releases** tego repozytorium.
-2. Rozpakuj i w zwykłym PowerShellu (nie jako administrator) uruchom:
+**A. From a release package** — nothing needs to be installed on the target machine, not even .NET.
+
+1. Download `xpp-graft-YYYYMMDD.zip` from the **Releases** tab of this repository.
+2. Unzip it and run in a regular PowerShell window (not as administrator):
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\xpp-graft\install.ps1 -Languages en-US,pl
 ```
 
-**B. Z kodu źródłowego** — wymaga .NET 9 SDK.
+**B. From source** — requires the .NET 9 SDK.
 
 ```powershell
 git clone https://github.com/willowdev-code/xpp-graft.git C:\Dev\xpp-graft
 cd C:\Dev\xpp-graft
-.\pack.ps1                     # tworzy dist\xpp-graft\ i dist\xpp-graft-RRRRMMDD.zip
+.\pack.ps1                     # creates dist\xpp-graft\ and dist\xpp-graft-YYYYMMDD.zip
 powershell -ExecutionPolicy Bypass -File .\dist\xpp-graft\install.ps1 -Languages en-US,pl
 ```
 
-Instalator kopiuje pliki do `C:\Tools\xpp-graft`, wykrywa `PackagesLocalDirectory` (z `web.config` AOS-a albo
-układu katalogów), zapisuje konfigurację, rejestruje serwer w Claude Desktop i Claude Code, a na końcu buduje indeks
-(modele własne ok. minuty, standard Microsoftu jednorazowo 20–40 minut). Przed instalacją zamknij Claude'a.
-Po instalacji uruchom go ponownie.
+The installer copies the files to `C:\Tools\xpp-graft`, detects `PackagesLocalDirectory` (from the AOS `web.config`
+or the folder layout), writes the configuration, registers the server in Claude Desktop and Claude Code, and finally
+builds the index (custom models take about a minute, the Microsoft standard 20–40 minutes, once). Close Claude before
+installing and start it again afterwards.
 
-Nowe wydanie: `.\pack.ps1`, a powstały ZIP dołącz do nowego wydania w zakładce Releases (tag `vX.Y.Z` zgodny
-z `<Version>` w `src\XppGraft\XppGraft.csproj`).
+New release: run `.\pack.ps1` and attach the resulting ZIP to a new release in the Releases tab (tag `vX.Y.Z`
+matching `<Version>` in `src\XppGraft\XppGraft.csproj`).
 
-Przydatne parametry:
+Useful parameters:
 
 ```powershell
-.\install.ps1 -PackagesDir K:\AosService\PackagesLocalDirectory   # zamiast wykrywania
-.\install.ps1 -Languages en-US,de -DisplayLanguage de             # języki etykiet
-.\install.ps1 -FullModels XPL,XPLRetail                           # wymuszenie pełnego indeksu
-.\install.ps1 -StandardModels HugeIsvModel                        # zepchnięcie modelu do poziomu standardowego
-.\install.ps1 -NoStandard                                         # tylko modele własne (szybko, mały indeks)
-.\install.ps1 -First -NoBuild -NoRegister                         # tryb nieinteraktywny / CI
+.\install.ps1 -PackagesDir K:\AosService\PackagesLocalDirectory   # instead of auto-detection
+.\install.ps1 -Languages en-US,de -DisplayLanguage de             # label languages
+.\install.ps1 -FullModels XPL,XPLRetail                           # force models into the full index
+.\install.ps1 -StandardModels HugeIsvModel                        # push a model down to the standard tier
+.\install.ps1 -NoStandard                                         # custom models only (fast, small index)
+.\install.ps1 -First -NoBuild -NoRegister                         # non-interactive / CI
 ```
 
-Deinstalacja: `uninstall.ps1` (usuwa wpisy MCP wskazujące na tę instalację, pyta o indeks i pliki).
-Nowy pakiet dystrybucyjny: `pack.ps1` (dodaj `-FrameworkDependent`, jeśli wolisz 5 MB i wymóg .NET 9).
+Uninstall: `uninstall.ps1` (removes the MCP entries that point to this installation, asks about the index and files).
+New distribution package: `pack.ps1` (add `-FrameworkDependent` if you prefer 5 MB and a .NET 9 requirement).
 
-## Konfiguracja po instalacji
+## Configuration after installation
 
 ```powershell
-xppgraft config                                   # pokaż ustawienia
-xppgraft config --add-language de                 # dołóż język etykiet
-xppgraft config --add-full-model XPL              # model/pakiet do pełnego indeksu
-xppgraft config --add-standard-model ContosoIsv   # model do poziomu standardowego
+xppgraft config                                   # show settings
+xppgraft config --add-language de                 # add a label language
+xppgraft config --add-full-model XPL              # model/package into the full index
+xppgraft config --add-standard-model ContosoIsv   # model into the standard tier
 xppgraft config --add-standard-publisher "Contoso"
 xppgraft config --packages-dir K:\AosService\PackagesLocalDirectory
-xppgraft detect [--set]                           # wykryj PackagesLocalDirectory
-xppgraft build                                    # zastosuj zmiany
+xppgraft detect [--set]                           # detect PackagesLocalDirectory
+xppgraft build                                    # apply changes
 ```
 
-Ustawienia siedzą w `xppgraft.json` obok katalogu `bin` — można je też edytować ręcznie.
+Settings live in `xppgraft.json` next to the `bin` folder and can also be edited by hand.
 
-## Trzy poziomy indeksu
+## Three index tiers
 
-| Poziom | Modele | Co zawiera |
+| Tier | Models | Contents |
 |---|---|---|
-| pełny | wszystkie niemicrosoftowe (wykrywane po `Publisher` w deskryptorze) + te z `extraFullModels` | obiekty, składowe, sygnatury i kod metod, referencje w kodzie (wywołania, typy, pola, intrinsics, etykiety), referencje z metadanych |
-| standardowy | modele Microsoftu | obiekty, pola/indeksy/relacje, sygnatury metod z zakresami linii, `extends`, CoC i event handlery — bez referencji z ciał metod |
-| skompilowany | pakiety wdrożone bez XML (np. lokalizacje krajowe albo moduły ISV dostarczone tylko w postaci skompilowanej) | nazwy obiektów z `bin\*.md`, metody, pola, grupy pól, relacje i **odwołania z kompilatora** z `.xref`, CoC z `ChainOfCommand.xml`, dziedziczenie z `ClassExtends.runtime`, etykiety z `Resources\<język>\*.resources.dll` — bez kodu źródłowego |
+| full | all non-Microsoft models (detected by `Publisher` in the descriptor) + those in `extraFullModels` | objects, members, method signatures and source, code references (calls, types, fields, intrinsics, labels), metadata references |
+| standard | Microsoft models | objects, fields/indexes/relations, method signatures with line ranges, `extends`, CoC and event handlers — no references from method bodies |
+| compiled | packages deployed without XML (e.g. country localizations or ISV modules shipped in compiled form only) | object names from `bin\*.md`, methods, fields, field groups, relations and **compiler references** from `.xref`, CoC from `ChainOfCommand.xml`, inheritance from `ClassExtends.runtime`, labels from `Resources\<language>\*.resources.dll` — no source code |
 
-Pakiet standardowy można awansować do pełnego (`--add-full-model ApplicationSuite`), jeśli potrzebny jest tam
-graf wywołań i natychmiastowy `xpp_grep`. Kosztem jest dłuższa budowa i większa baza.
+A standard package can be promoted to the full tier (`--add-full-model ApplicationSuite`) if you need its call graph
+and instant `xpp_grep`. The cost is a longer build and a larger database.
 
-Pakiety skompilowane przebudowują się same, gdy zmieni się ich `.xref`, `.md` albo zasoby. Ręcznie:
-`xppgraft build --compiled-only --force`. Katalogi, których nie da się zaindeksować wcale, wypisuje `xppgraft status`
-w linii „on disk but NOT indexed”.
+Compiled packages rebuild themselves when their `.xref`, `.md` or resources change. Manually:
+`xppgraft build --compiled-only --force`. Folders that cannot be indexed at all are listed by `xppgraft status`
+in the "on disk but NOT indexed" line.
 
-## Uprawnienia do indeksu
+## Index permissions
 
-Domyślnie indeks trafia do `%LOCALAPPDATA%\xpp-graft\index\xpp.db`, czyli tam, gdzie użytkownik uruchamiający
-Claude'a ma prawo zapisu. Jeśli wskażesz indeks w katalogu instalacji, a instalację przeprowadzisz jako administrator,
-Claude (działający bez podniesionych uprawnień) nie będzie mógł go aktualizować — zobaczysz wtedy w odpowiedziach
-komunikat `index is read-only`, a wyniki zamarzną na stanie z chwili budowy. Naprawa:
+By default the index goes to `%LOCALAPPDATA%\xpp-graft\index\xpp.db`, where the user running Claude can write.
+If you put the index in the installation folder and install as administrator, Claude (running without elevation)
+cannot update it — responses then show `index is read-only` and results freeze at the time of the build. Fix:
 
 ```powershell
 xppgraft config --index-path "$env:LOCALAPPDATA\xpp-graft\index\xpp.db"
 xppgraft build
 ```
 
-W trybie tylko do odczytu `xpp_method` i `xpp_object` i tak zwracają aktualny kod (parsują plik na żywo),
-ale `xpp_find`, `xpp_callers` i `xpp_refs` korzystają z zamrożonego indeksu.
+In read-only mode `xpp_method` and `xpp_object` still return current code (they parse the file live),
+but `xpp_find`, `xpp_callers` and `xpp_refs` use the frozen index.
 
-## Aktualność indeksu
+## Index freshness
 
-- `FileSystemWatcher` na katalogach modeli pełnego poziomu — zapis z Visual Studio widoczny przy następnym zapytaniu.
-- Skan dat plików przy starcie i co `rescanIntervalSeconds` (domyślnie 5 min) — wyłapuje Get Latest z Team Explorera.
-- Standard: odcisk pakietu (deskryptory + `bin\*.dll`) — przebudowa tylko po aktualizacji platformy.
-- Zapisy serializowane nazwanym muteksem, więc Claude Desktop i Claude Code mogą działać równolegle.
+- `FileSystemWatcher` on full-tier model folders — a save in Visual Studio is visible on the next query.
+- File date scan at startup and every `rescanIntervalSeconds` (default 5 min) — catches Get Latest from Team Explorer.
+- Standard: package fingerprint (descriptors + `bin\*.dll`) — rebuilt only after a platform update.
+- Writes are serialized with a named mutex, so Claude Desktop and Claude Code can run side by side.
 
-## Narzędzia MCP
+## MCP tools
 
-| Narzędzie | Zastosowanie | Poziom standardowy |
+| Tool | Purpose | Standard tier |
 |---|---|---|
-| `xpp_find` | obiekty, metody, pola po nazwie (`*`, `?`, `Obiekt.składowa`; nazwa z kropką sprawdzana też jako pełna nazwa obiektu, np. `*Staging.Contoso` z `type=tableext`) | tak |
-| `xpp_object` | szkielet obiektu: właściwości z etykietami, pola, indeksy, relacje, datasource'y, drzewo kontrolek i menu, metody z zakresami linii, rozszerzenia | tak |
-| `xpp_method` | kod metody + ścieżka i zakres linii + wrappery CoC i handlery | tak |
-| `xpp_extensions` | klasy CoC, rozszerzenia tabel/formularzy, event handlery, klasy pochodne | tak |
-| `xpp_callers` / `xpp_callees` | kto wywołuje metodę / czego używa metoda | nie (tylko CoC i handlery) |
-| `xpp_refs` | wszystkie użycia klasy, tabeli, pola, EDT, enuma, pozycji menu, etykiety | nie |
-| `xpp_grep` | regex po ciałach metod | `standard=true` + filtr modelu (czyta pliki z dysku) |
-| `xpp_label` | rozwiązanie `@SYS…`/`@Model:Klucz` albo szukanie po tekście | tak |
-| `xpp_status` | stan indeksu | — |
+| `xpp_find` | objects, methods, fields by name (`*`, `?`, `Object.member`; a dotted name is also tried as a full object name, e.g. `*Staging.Contoso` with `type=tableext`) | yes |
+| `xpp_object` | object skeleton: properties with labels, fields, indexes, relations, data sources, control and menu tree, methods with line ranges, extensions | yes |
+| `xpp_method` | method source + file path and line range + CoC wrappers and handlers | yes |
+| `xpp_extensions` | CoC classes, table/form extensions, event handlers, derived classes | yes |
+| `xpp_callers` / `xpp_callees` | who calls a method / what a method uses | no (CoC and handlers only) |
+| `xpp_refs` | every use of a class, table, field, EDT, enum, menu item, label | no |
+| `xpp_grep` | regex over method bodies | `standard=true` + model filter (reads files from disk) |
+| `xpp_label` | resolve `@SYS…`/`@Model:Key` or search by text | yes |
+| `xpp_status` | index status | — |
 
-### Drzewo kontrolek i menu
+### Control and menu trees
 
-Duże drzewa (ponad 60 elementów) są zwijane do dwóch poziomów z licznikiem dzieci `[+N]`. Rozwijanie:
+Large trees (more than 60 elements) are collapsed to two levels with a child counter `[+N]`. To expand:
 
-| Parametr | Działanie | Przykład |
+| Parameter | Effect | Example |
 |---|---|---|
-| `filter` | wildcard po nazwie lub ścieżce; wypisuje **pełne ścieżki** | `xppgraft object CustTable --type form --filter *PersonalTitle*` |
-| `parent` | tylko poddrzewo danego elementu (nazwa albo ścieżka) | `--parent TabGeneral` |
-| `depth` | liczba poziomów (pod `parent`, jeśli podany) | `--parent UpperGroup --depth 1` |
+| `filter` | wildcard on name or path; prints **full paths** | `xppgraft object CustTable --type form --filter *PersonalTitle*` |
+| `parent` | only the subtree of one element (name or path) | `--parent TabGeneral` |
+| `depth` | number of levels (below `parent`, if given) | `--parent UpperGroup --depth 1` |
 
-Kontrolki ReferenceGroup pokazują `ref=<datasource>.<ReferenceField>`, `replGroup=<ReplacementFieldGroup>`
-i `relPath=<DataRelationPath>`. Elementy rozszerzeń menu pokazują `(under <Parent>)`, `position=<PositionType>`
-i `menuitem=<MenuItemName>`.
+ReferenceGroup controls show `ref=<datasource>.<ReferenceField>`, `replGroup=<ReplacementFieldGroup>`
+and `relPath=<DataRelationPath>`. Menu extension elements show `(under <Parent>)`, `position=<PositionType>`
+and `menuitem=<MenuItemName>`.
 
 ## CLI
 
 ```
 xppgraft find|object|method|callers|callees|refs|ext|grep|label …
 xppgraft build [--full-only] [--std-only] [--compiled-only] [--force]
-xppgraft status | detect | config | register | unregister | mcp
+xppgraft status | detect | config | register | unregister | mcp | version
 ```
 
-Zmienne: `XPPGRAFT_CONFIG` (inna konfiguracja), `XPPGRAFT_VERBOSE=1` (czasy zapytań SQL na stderr).
+Environment variables: `XPPGRAFT_CONFIG` (another configuration), `XPPGRAFT_VERBOSE=1` (SQL timings on stderr).
 
-## Rozwój narzędzia
+## Development
 
-Kod źródłowy mieszka **osobno od instalacji**, domyślnie w `C:\Dev\xpp-graft`:
+The source code lives **separately from the installation**, by default in `C:\Dev\xpp-graft`:
 
 ```
 C:\Dev\xpp-graft\
-  xpp-graft.sln             solucja dla Visual Studio 2022
-  src\XppGraft\*.cs         kod (14 plików)
-  src\XppGraft\Properties\launchSettings.json   profile uruchomieniowe (F5)
-  build.ps1                 kompilacja; -Deploy podmienia binaria w instalacji
-  pack.ps1                  pakiet ZIP do instalacji gdzie indziej
-  install.ps1 uninstall.ps1 README.md
-  build\  dist\             wyniki (nie trzymaj tu niczego własnego)
+  xpp-graft.sln             solution for Visual Studio 2022
+  src\XppGraft\*.cs         source (14 files)
+  src\XppGraft\Properties\launchSettings.json   launch profiles (F5)
+  build.ps1                 compile; -Deploy replaces the binaries in the installation
+  pack.ps1                  ZIP package for installing elsewhere
+  install.ps1 uninstall.ps1 README.md README.pl.md
+  build\  dist\             outputs (do not keep anything of your own here)
 ```
 
 ### Visual Studio
 
-Otwórz `C:\Dev\xpp-graft\xpp-graft.sln` w **Visual Studio 2022** (17.12 lub nowszym — VS 2019 nie obsługuje .NET 9).
-Na pasku narzędzi obok zielonej strzałki wybierz profil z `launchSettings.json` (`status`, `find`,
-`object (form controls)`, `method`, `build compiled packages`, `verbose SQL (status)`) i naciśnij F5 —
-program uruchomi się z debuggerem na prawdziwej konfiguracji i indeksie (`XPPGRAFT_CONFIG` jest ustawione w profilu).
-Własny profil: Debug → *XppGraft Debug Properties* → nowy profil, w „Command line arguments” wpisz polecenie CLI.
+Open `C:\Dev\xpp-graft\xpp-graft.sln` in **Visual Studio 2022** (17.12 or newer — VS 2019 does not support .NET 9).
+Next to the green arrow on the toolbar pick a profile from `launchSettings.json` (`status`, `find`,
+`object (form controls)`, `method`, `build compiled packages`, `verbose SQL (status)`) and press F5 —
+the program starts under the debugger against the real configuration and index (`XPPGRAFT_CONFIG` is set in the profile).
+Your own profile: Debug → *XppGraft Debug Properties* → new profile, enter a CLI command in "Command line arguments".
 
-Serwera MCP nie debuguje się przez F5 (rozmawia przez stdin/stdout z Claude'em). Żeby podejrzeć go w działaniu,
-wdroż wersję Debug (`.\build.ps1 -Deploy -Configuration Debug`), zrestartuj Claude'a i w VS użyj
+The MCP server cannot be debugged with F5 (it talks to Claude over stdin/stdout). To watch it at work,
+deploy a Debug build (`.\build.ps1 -Deploy -Configuration Debug`), restart Claude and in VS use
 Debug → *Attach to Process* → `xppgraft.exe`.
 
-Gdzie co dopisać:
+Where to change what:
 
-| Zmiana | Plik |
+| Change | File |
 |---|---|
-| nowe narzędzie MCP | `McpTools.cs` (deklaracja) + `Queries.cs` (zapytanie) |
-| inne dane z XML-a (nowy typ obiektu, właściwość, składowa) | `XmlObjectParser.cs` |
-| rozpoznawanie konstrukcji X++ (wywołania, atrybuty, intrinsics) | `CodeAnalyzer.cs`, `XppLexer.cs` |
-| nowa tabela lub indeks w bazie | `Store.cs` — podnieś `SchemaVersion`, co wymusi przebudowę |
-| odświeżanie, obserwator, poziomy modeli | `IndexService.cs`, `Indexer.cs`, `Catalog.cs` |
-| pakiety bez XML (`.xref`, `bin\*.md`, zasoby z etykietami) | `BinaryPackage.cs` |
-| polecenia CLI, konfiguracja, rejestracja w Claude | `Program.cs`, `Config.cs`, `Detect.cs` |
+| new MCP tool | `McpTools.cs` (declaration) + `Queries.cs` (query) |
+| other data from XML (new object type, property, member) | `XmlObjectParser.cs` |
+| recognizing X++ constructs (calls, attributes, intrinsics) | `CodeAnalyzer.cs`, `XppLexer.cs` |
+| new table or index in the database | `Store.cs` — bump `SchemaVersion`, which forces a rebuild |
+| refresh, watcher, model tiers | `IndexService.cs`, `Indexer.cs`, `Catalog.cs` |
+| packages without XML (`.xref`, `bin\*.md`, label resources) | `BinaryPackage.cs` |
+| CLI commands, configuration, registration in Claude | `Program.cs`, `Config.cs`, `Detect.cs` |
 
-Pętla pracy:
+Work loop:
 
 ```powershell
-.\build.ps1                 # kompilacja do .\build
-.\build\xppgraft.exe find CustTable   # test z linii poleceń, bez restartu Claude'a
-.\build.ps1 -Deploy         # podmiana w instalacji (zatrzymuje działające procesy)
+.\build.ps1                 # compile into .\build
+.\build\xppgraft.exe find CustTable   # test from the command line, no Claude restart needed
+.\build.ps1 -Deploy         # replace the installed binaries (stops running processes)
 ```
 
-Po `-Deploy` zrestartuj Claude Desktop i sesje Claude Code — MCP ładuje binarium przy starcie.
+After `-Deploy` restart Claude Desktop and Claude Code sessions — MCP loads the binary at startup.
 
-Zmiana `Store.SchemaVersion` kasuje indeks i wymusza `xppgraft build`.
+Changing `Store.SchemaVersion` drops the index and requires `xppgraft build`.
 
-## Ograniczenia
+Documentation is kept in two languages: any change to `README.md` must be mirrored in `README.pl.md` in the same commit.
 
-- Typy odbiorników wywołań rozwiązywane są z deklaracji zmiennych, bez pełnej analizy typów; łańcuchy `a.b().c()`
-  trafiają do sekcji „receiver type unknown” w `xpp_callers`.
-- `xpp_grep --standard` czyta XML-e z dysku: mały pakiet to sekundy, `ApplicationSuite` to minuty (albo odmowa
-  przy ponad 60 tys. plików). Rozwiązanie: filtr `type`/`object` albo awans pakietu do pełnego poziomu.
-- Makra (`#nazwa`) nie są rozwijane.
-- Pakiety skompilowane: brak kodu źródłowego; skład grup pól i właściwości obiektów nie są odtwarzane
-  (format `bin\*.md` jest czytany tylko w nagłówku), a odwołania obejmują tylko to, co zapisał kompilator.
-- Windows i x64 (pakiet samodzielny); indeks nie jest przenośny między maszynami — buduje się go lokalnie.
+## Limitations
+
+- Call receiver types are resolved from variable declarations, without full type analysis; chains like `a.b().c()`
+  end up in the "receiver type unknown" section of `xpp_callers`.
+- `xpp_grep --standard` reads XML from disk: a small package takes seconds, `ApplicationSuite` minutes (or is refused
+  above 60k files). Workaround: a `type`/`object` filter or promoting the package to the full tier.
+- Macros (`#name`) are not expanded.
+- Compiled packages: no source code; field group contents and object properties are not reconstructed
+  (only the header of `bin\*.md` is read), and references cover only what the compiler recorded.
+- Windows and x64 (self-contained package); the index is not portable between machines — it is built locally.

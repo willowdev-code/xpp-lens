@@ -1,14 +1,16 @@
 <#
 .SYNOPSIS
-    Buduje pakiet dystrybucyjny xpp-graft (ZIP) do instalacji na innej maszynie.
+    Builds the xpp-graft distribution package (ZIP) for installing on another machine.
 
 .DESCRIPTION
-    Domyslnie publikuje wersje samodzielna (self-contained, jeden plik EXE) - na maszynie
-    docelowej nie trzeba niczego instalowac. Z -FrameworkDependent powstaje wersja mala,
-    ktora wymaga zainstalowanego .NET 9 Runtime.
+    By default publishes a self-contained build (single EXE): nothing needs to be installed
+    on the target machine. With -FrameworkDependent the package is small but requires the
+    .NET 9 Runtime on the target machine.
 
 .EXAMPLE
     .\pack.ps1
+.EXAMPLE
+    .\pack.ps1 -FrameworkDependent
 #>
 [CmdletBinding()]
 param(
@@ -36,17 +38,17 @@ else {
     $publishArgs += @('--self-contained', 'true', '-p:PublishSingleFile=true', '-p:IncludeNativeLibrariesForSelfExtract=true', '-p:EnableCompressionInSingleFile=true')
 }
 
-Write-Host "publikowanie ($(if ($FrameworkDependent) { 'wymaga .NET 9' } else { 'samodzielna' }))..." -ForegroundColor Cyan
+Write-Host "publishing ($(if ($FrameworkDependent) { 'requires .NET 9' } else { 'self-contained' }))..." -ForegroundColor Cyan
 & dotnet @publishArgs | Where-Object { $_ -match 'error|warning CS|->' }
-if ($LASTEXITCODE -ne 0) { throw "dotnet publish nie powiodlo sie" }
+if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed" }
 
 Remove-Item (Join-Path $stage 'bin\*.pdb') -Force -ErrorAction SilentlyContinue
-foreach ($f in 'install.ps1', 'uninstall.ps1', 'README.md') {
+foreach ($f in 'install.ps1', 'uninstall.ps1', 'README.md', 'README.pl.md') {
     Copy-Item (Join-Path $PSScriptRoot $f) $stage -Force
 }
 
 $size = [math]::Round((Get-ChildItem $stage -Recurse -File | Measure-Object Length -Sum).Sum / 1MB, 1)
-Write-Host "pakiet: $stage ($size MB)" -ForegroundColor Cyan
+Write-Host "package: $stage ($size MB)" -ForegroundColor Cyan
 
 if (-not $NoZip) {
     $version = (Get-Date -Format 'yyyyMMdd')
@@ -56,4 +58,4 @@ if (-not $NoZip) {
     Write-Host "zip: $zip ($([math]::Round((Get-Item $zip).Length / 1MB, 1)) MB)" -ForegroundColor Cyan
 }
 
-Write-Host "`nNa maszynie docelowej: rozpakuj i uruchom install.ps1" -ForegroundColor Green
+Write-Host "`nOn the target machine: unzip and run install.ps1" -ForegroundColor Green

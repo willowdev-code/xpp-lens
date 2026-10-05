@@ -1,11 +1,14 @@
-﻿<#
+<#
 .SYNOPSIS
-    Instaluje xpp-graft: indeks kodu X++ (D365 F&O) udostepniany Claude'owi przez MCP.
+    Installs xpp-graft: an X++ (D365 F&O) code index served to Claude over MCP.
 
 .DESCRIPTION
-    Kopiuje pliki, ustala katalog PackagesLocalDirectory (podany lub wykryty),
-    zapisuje konfiguracje, rejestruje serwer MCP w Claude Desktop i Claude Code
-    oraz buduje indeks. Repozytorium AOS jest czytane wylacznie do odczytu.
+    Copies the files, determines the PackagesLocalDirectory folder (given or detected),
+    writes the configuration, registers the MCP server in Claude Desktop and Claude Code
+    and builds the index. The AOS repository is only ever read, never written.
+
+    Run it in a regular (non-elevated) PowerShell: the index is created in the
+    %LOCALAPPDATA% of the user who runs the installer, and Claude must be able to write to it.
 
 .EXAMPLE
     .\install.ps1
@@ -34,34 +37,37 @@ function Head($m) { Write-Host "`n$m" -ForegroundColor Cyan }
 
 $src = $PSScriptRoot
 if (-not (Test-Path (Join-Path $src 'bin\xppgraft.exe'))) {
-    throw "Nie znaleziono $src\bin\xppgraft.exe - uruchom install.ps1 z rozpakowanego pakietu xpp-graft."
+    throw "$src\bin\xppgraft.exe not found - run install.ps1 from an unpacked xpp-graft package."
 }
 
-Head "1/5 Kopiowanie plikow do $InstallDir"
-Get-CimInstance Win32_Process -Filter "Name='xppgraft.exe'" | ForEach-Object {
-    Say "zatrzymuje dzialajacy proces xppgraft (PID $($_.ProcessId))"
-    Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
-}
+Head "1/5 Copying files to $InstallDir"
+$target = [IO.Path]::GetFullPath($InstallDir).TrimEnd('\') + '\'
+Get-CimInstance Win32_Process -Filter "Name='xppgraft.exe'" |
+    Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($target, [StringComparison]::OrdinalIgnoreCase) } |
+    ForEach-Object {
+        Say "stopping running xppgraft process (PID $($_.ProcessId))"
+        Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+    }
 New-Item -ItemType Directory -Force -Path (Join-Path $InstallDir 'bin') | Out-Null
 $srcFull = (Resolve-Path $src).Path.TrimEnd('\')
 $dstFull = (Resolve-Path $InstallDir).Path.TrimEnd('\')
 if ($srcFull -ieq $dstFull) {
-    Say "pakiet jest juz w katalogu docelowym - pomijam kopiowanie"
+    Say "the package is already in the target folder - skipping copy"
 }
 else {
     Copy-Item (Join-Path $src 'bin\*') (Join-Path $InstallDir 'bin') -Recurse -Force
-    foreach ($f in 'install.ps1', 'uninstall.ps1', 'README.md') {
+    foreach ($f in 'install.ps1', 'uninstall.ps1', 'README.md', 'README.pl.md') {
         if (Test-Path (Join-Path $src $f)) { Copy-Item (Join-Path $src $f) $InstallDir -Force }
     }
 }
 $exe = Join-Path $InstallDir 'bin\xppgraft.exe'
-Say "gotowe: $exe"
+Say "done: $exe"
 
-Head "2/5 Katalog PackagesLocalDirectory"
+Head "2/5 PackagesLocalDirectory folder"
 if (-not $PackagesDir) {
     $found = @(& $exe detect | Where-Object { $_ -match "`t" })
     if ($found.Count -eq 0) {
-        throw "Nie wykryto PackagesLocalDirectory. Uruchom ponownie z -PackagesDir <sciezka>."
+        throw "PackagesLocalDirectory was not detected. Run again with -PackagesDir <path>."
     }
     $cands = @($found | ForEach-Object {
         $p = $_ -split "`t"
@@ -69,35 +75,35 @@ if (-not $PackagesDir) {
     })
     if ($cands.Count -eq 1 -or $First) {
         $PackagesDir = $cands[0].Path
-        Say "wykryto: $PackagesDir ($($cands[0].Packages), $($cands[0].Source))"
+        Say "detected: $PackagesDir ($($cands[0].Packages), $($cands[0].Source))"
     }
     else {
-        Write-Host "  Znaleziono kilka katalogow:"
+        Write-Host "  Several folders found:"
         for ($i = 0; $i -lt $cands.Count; $i++) {
             Write-Host ("   [{0}] {1}  ({2}, {3})" -f $i, $cands[$i].Path, $cands[$i].Packages, $cands[$i].Source)
         }
         if (-not [Environment]::UserInteractive -or $Host.Name -eq 'Default Host') {
-            throw "Kilka kandydatow - uruchom ponownie z -PackagesDir <sciezka> albo z -First."
+            throw "Several candidates - run again with -PackagesDir <path> or -First."
         }
-        $sel = Read-Host "  Wybierz numer [0]"
+        $sel = Read-Host "  Pick a number [0]"
         if (-not $sel) { $sel = 0 }
         $PackagesDir = $cands[[int]$sel].Path
     }
 }
-Say "uzywam: $PackagesDir"
+Say "using: $PackagesDir"
 
-Head "3/5 Konfiguracja"
+Head "3/5 Configuration"
 $cfgArgs = @('config', '--packages-dir', $PackagesDir, '--languages', ($Languages -join ','))
 if ($DisplayLanguage) { $cfgArgs += @('--display-language', $DisplayLanguage) }
 if ($FullModels.Count)     { $cfgArgs += @('--full-models', ($FullModels -join ',')) }
 if ($StandardModels.Count) { $cfgArgs += @('--standard-models', ($StandardModels -join ',')) }
 if ($NoStandard)           { $cfgArgs += @('--index-standard', 'false') }
 & $exe @cfgArgs
-if ($LASTEXITCODE -ne 0) { throw "Konfiguracja nie powiodla sie." }
+if ($LASTEXITCODE -ne 0) { throw "Configuration failed." }
 
-Head "4/5 Rejestracja w Claude"
+Head "4/5 Registering in Claude"
 if ($NoRegister) {
-    Say "pominieto (-NoRegister). Recznie: `"$exe`" register"
+    Say "skipped (-NoRegister). Manually: `"$exe`" register"
 }
 else {
     $regArgs = @('register')
@@ -106,18 +112,18 @@ else {
     & $exe @regArgs
 }
 
-Head "5/5 Budowa indeksu"
+Head "5/5 Building the index"
 if ($NoBuild) {
-    Say "pominieto (-NoBuild). Recznie: `"$exe`" build"
+    Say "skipped (-NoBuild). Manually: `"$exe`" build"
 }
 else {
-    Say "modele wlasne: ok. 1 minuta; standard Microsoftu: 20-40 minut (jednorazowo)"
+    Say "custom models: about 1 minute; Microsoft standard: 20-40 minutes (once)"
     & $exe build
-    if ($LASTEXITCODE -ne 0) { throw "Budowa indeksu nie powiodla sie." }
+    if ($LASTEXITCODE -ne 0) { throw "Building the index failed." }
 }
 
-Head "Gotowe"
-Say "Zamknij i uruchom ponownie Claude Desktop; sesje Claude Code startuj od nowa."
-Say "Zmiana ustawien pozniej:  `"$exe`" config --add-language de --add-full-model XPL"
-Say "Stan indeksu:             `"$exe`" status"
-Say "Odinstalowanie:           $InstallDir\uninstall.ps1"
+Head "Done"
+Say "Quit and restart Claude Desktop; start Claude Code sessions again."
+Say "Change settings later:  `"$exe`" config --add-language de --add-full-model XPL"
+Say "Index status:           `"$exe`" status"
+Say "Uninstall:              $InstallDir\uninstall.ps1"
