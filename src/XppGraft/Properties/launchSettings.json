@@ -1,0 +1,37 @@
+{
+  "profiles": {
+    "status": {
+      "commandName": "Project",
+      "commandLineArgs": "status",
+      "environmentVariables": { "XPPGRAFT_CONFIG": "C:\\Tools\\xpp-graft\\xppgraft.json" }
+    },
+    "find": {
+      "commandName": "Project",
+      "commandLineArgs": "find \"CustTable.*\" --type tableext",
+      "environmentVariables": { "XPPGRAFT_CONFIG": "C:\\Tools\\xpp-graft\\xppgraft.json" }
+    },
+    "object (form controls)": {
+      "commandName": "Project",
+      "commandLineArgs": "object CustTable --type form --sections controls --depth 2",
+      "environmentVariables": { "XPPGRAFT_CONFIG": "C:\\Tools\\xpp-graft\\xppgraft.json" }
+    },
+    "method": {
+      "commandName": "Project",
+      "commandLineArgs": "method CustTable find",
+      "environmentVariables": { "XPPGRAFT_CONFIG": "C:\\Tools\\xpp-graft\\xppgraft.json" }
+    },
+    "build compiled packages": {
+      "commandName": "Project",
+      "commandLineArgs": "build --compiled-only --force",
+      "environmentVariables": { "XPPGRAFT_CONFIG": "C:\\Tools\\xpp-graft\\xppgraft.json" }
+    },
+    "verbose SQL (status)": {
+      "commandName": "Project",
+      "commandLineArgs": "status",
+      "environmentVariables": {
+        "XPPGRAFT_CONFIG": "C:\\Tools\\xpp-graft\\xppgraft.json",
+        "XPPGRAFT_VERBOSE": "1"
+      }
+    }
+  }
+}

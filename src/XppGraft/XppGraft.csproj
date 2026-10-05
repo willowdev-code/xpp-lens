@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>xppgraft</AssemblyName>
+    <RootNamespace>XppGraft</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <Company>WillowDev</Company>
+    <Authors>WillowDev</Authors>
+    <Product>xpp-graft</Product>
+    <AssemblyTitle>xpp-graft — X++ code index for MCP</AssemblyTitle>
+    <Description>X++ (Dynamics 365 F&amp;O) code index served to AI assistants over MCP</Description>
+    <Copyright>Copyright © 2026 WillowDev</Copyright>
+    <Version>1.1.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.12" />
+    <PackageReference Include="ModelContextProtocol" Version="2.2.0" />
+  </ItemGroup>
+
+</Project>

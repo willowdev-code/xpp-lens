@@ -1,0 +1,15 @@
+# build output
+build/
+dist/
+**/bin/
+**/obj/
+
+# IDE
+.vs/
+*.user
+*.suo
+
+# local index / data (never part of the repo)
+*.db
+*.db-wal
+*.db-shm
