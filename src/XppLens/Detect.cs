@@ -1,6 +1,6 @@
 using System.Xml.Linq;
 
-namespace XppGraft;
+namespace XppLens;
 
 public sealed record DetectedDir(string Path, string Source, int Packages);
 

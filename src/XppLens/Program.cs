@@ -2,7 +2,7 @@ using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using XppGraft;
+using XppLens;
 
 var cmd = args.Length > 0 ? args[0].ToLowerInvariant() : "help";
 var rest = args.Skip(1).ToList();
@@ -30,7 +30,7 @@ static string AppVersion() => typeof(Config).Assembly.GetName().Version?.ToStrin
 
 if (cmd is "version" or "--version" or "-v")
 {
-    Console.WriteLine($"xpp-graft {AppVersion()} — Copyright © 2026 WillowDev");
+    Console.WriteLine($"xpp-lens {AppVersion()} — Copyright © 2026 WillowDev");
     return 0;
 }
 
@@ -58,7 +58,7 @@ if (cmd == "mcp")
     builder.Services
         .AddMcpServer(o =>
         {
-            o.ServerInfo = new() { Name = "xpp-graft", Version = AppVersion() };
+            o.ServerInfo = new() { Name = "xpp-lens", Version = AppVersion() };
             o.ServerInstructions = McpTools.Instructions;
         })
         .WithStdioServerTransport()
@@ -72,7 +72,7 @@ if (cmd == "detect")
     var found = Detect.PackagesDirs();
     if (found.Count == 0)
     {
-        Console.WriteLine("No PackagesLocalDirectory found. Set it manually: xppgraft config --packages-dir <path>");
+        Console.WriteLine("No PackagesLocalDirectory found. Set it manually: xpplens config --packages-dir <path>");
         return 1;
     }
     foreach (var d in found) Console.WriteLine($"{d.Path}\t{d.Packages} packages\t{d.Source}");
@@ -80,12 +80,12 @@ if (cmd == "detect")
     {
         if (found.Count > 1 && !Flag("first"))
         {
-            Console.Error.WriteLine("Several candidates found — pass --first or use: xppgraft config --packages-dir <path>");
+            Console.Error.WriteLine("Several candidates found — pass --first or use: xpplens config --packages-dir <path>");
             return 1;
         }
         cfg.PackagesDir = found[0].Path;
         cfg.Save();
-        Console.WriteLine($"\nsaved packagesDir = {cfg.PackagesDir} to {cfg.SourcePath}\nnext: xppgraft build");
+        Console.WriteLine($"\nsaved packagesDir = {cfg.PackagesDir} to {cfg.SourcePath}\nnext: xpplens build");
     }
     return 0;
 }
@@ -145,14 +145,14 @@ if (cmd == "config")
         Console.WriteLine($"saved {cfg.SourcePath}\n");
     }
     Console.Write(cfg.Describe());
-    if (changed && rebuild) Console.WriteLine("\nrun 'xppgraft build' to apply (models/languages are re-read from disk)");
+    if (changed && rebuild) Console.WriteLine("\nrun 'xpplens build' to apply (models/languages are re-read from disk)");
     return 0;
 }
 
 if (cmd is "register" or "unregister")
 {
-    var serverName = Opt("name") ?? "xpp-graft";
-    var exePath = Opt("exe") ?? Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "xppgraft.exe");
+    var serverName = Opt("name") ?? "xpp-lens";
+    var exePath = Opt("exe") ?? Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "xpplens.exe");
     bool desktopOnly = Flag("desktop"), codeOnly = Flag("code");
 
     var targets = new List<(string Path, bool CreateIfMissing)>();
@@ -223,11 +223,11 @@ if (cmd is "register" or "unregister")
 if (cmd is "help" or "-h" or "--help")
 {
     Console.WriteLine("""
-        xppgraft — X++ code index (D365 F&O) · WillowDev
+        xpplens — X++ code index (D365 F&O) · WillowDev
 
-          xppgraft detect [--set [--first]]                     find PackagesLocalDirectory on this machine
-          xppgraft config                                       show settings
-          xppgraft config --packages-dir <path> | --index-path <path>
+          xpplens detect [--set [--first]]                     find PackagesLocalDirectory on this machine
+          xpplens config                                       show settings
+          xpplens config --packages-dir <path> | --index-path <path>
                           --add-language pl | --remove-language pl | --languages en-US,pl
                           --display-language en-US
                           --add-full-model XPL | --remove-full-model XPL | --full-models A,B
@@ -235,30 +235,30 @@ if (cmd is "help" or "-h" or "--help")
                           --add-standard-publisher "Contoso" | --standard-publishers Microsoft
                           --index-standard true|false | --standard-code true|false
                           --rescan-seconds 300 | --usage-log true|false
-          xppgraft build [--full-only] [--std-only] [--compiled-only] [--force]   build / update the index
-          xppgraft status
-          xppgraft stats [--days 7] [--top 10]                   tokens, time and empty answers of MCP calls
-          xppgraft find <query[;query…]> [--kind any|object|method|field] [--type t] [--model m] [--limit n]
-          xppgraft object <name[;name…]> [--type t] [--sections list] [--parent control] [--depth n] [--filter *text*]
-          xppgraft method <object> [<method[;method…]>] [--type t] [--match regex] [--lines from-to] [--context n]
-          xppgraft callers <object> <method> [--depth n] [--limit n] [--standard true|false]
-          xppgraft callees <object> <method> [--type t]
-          xppgraft refs <name> [--member m] [--kind k] [--model m] [--limit n]
-          xppgraft ext <name>
-          xppgraft scaffold coc|event|delegate|pre|post <object> <member> [--element ds|ds.field|control] [--class name] [--type t]
-          xppgraft build-errors [--model m] [--severity error|warning|all] [--limit n]
-          xppgraft security <menuitem|form|privilege|duty|role> [--type t] [--limit n]
-          xppgraft join <fromTable> <toTable> [--hops n] [--limit n]
-          xppgraft entity <entity|publicName|table> [--sections list] [--limit n]
-          xppgraft changed [--since 24h|3d|2026-10-01] [--model m] [--type t] [--limit n]
-          xppgraft grep <regex> [--model m] [--type t] [--object o] [--standard] [--limit n]
-          xppgraft label <@id|text> [--lang l] [--limit n]
-          xppgraft mcp                                           MCP server over stdio
-          xppgraft register [--desktop] [--code] [--name xpp-graft]    add to Claude config(s)
-          xppgraft unregister [--desktop] [--code] [--any]             (--any: also other installations)
-          xppgraft version
+          xpplens build [--full-only] [--std-only] [--compiled-only] [--force]   build / update the index
+          xpplens status
+          xpplens stats [--days 7] [--top 10]                   tokens, time and empty answers of MCP calls
+          xpplens find <query[;query…]> [--kind any|object|method|field] [--type t] [--model m] [--limit n]
+          xpplens object <name[;name…]> [--type t] [--sections list] [--parent control] [--depth n] [--filter *text*]
+          xpplens method <object> [<method[;method…]>] [--type t] [--match regex] [--lines from-to] [--context n]
+          xpplens callers <object> <method> [--depth n] [--limit n] [--standard true|false]
+          xpplens callees <object> <method> [--type t]
+          xpplens refs <name> [--member m] [--kind k] [--model m] [--limit n]
+          xpplens ext <name>
+          xpplens scaffold coc|event|delegate|pre|post <object> <member> [--element ds|ds.field|control] [--class name] [--type t]
+          xpplens build-errors [--model m] [--severity error|warning|all] [--limit n]
+          xpplens security <menuitem|form|privilege|duty|role> [--type t] [--limit n]
+          xpplens join <fromTable> <toTable> [--hops n] [--limit n]
+          xpplens entity <entity|publicName|table> [--sections list] [--limit n]
+          xpplens changed [--since 24h|3d|2026-10-01] [--model m] [--type t] [--limit n]
+          xpplens grep <regex> [--model m] [--type t] [--object o] [--standard] [--limit n]
+          xpplens label <@id|text> [--lang l] [--limit n]
+          xpplens mcp                                           MCP server over stdio
+          xpplens register [--desktop] [--code] [--name xpp-lens]    add to Claude config(s)
+          xpplens unregister [--desktop] [--code] [--any]             (--any: also other installations)
+          xpplens version
 
-        config: xppgraft.json next to the executable or in a parent folder (or XPPGRAFT_CONFIG)
+        config: xpplens.json next to the executable or in a parent folder (or XPPLENS_CONFIG)
         """);
     return 0;
 }
@@ -345,11 +345,11 @@ try
                 "changed" => q.Changed(Opt("since"), Opt("model"), Opt("type"), int.Parse(Opt("limit") ?? "100")),
                 "grep" => q.Grep(Arg(0), Opt("model"), Opt("type"), Opt("object"), Flag("standard"), int.Parse(Opt("limit") ?? "80")),
                 "label" => q.Label(Arg(0), Opt("lang"), int.Parse(Opt("limit") ?? "30")),
-                _ => throw new ArgumentException($"unknown command '{cmd}' (see xppgraft help)"),
+                _ => throw new ArgumentException($"unknown command '{cmd}' (see xpplens help)"),
             };
             Console.WriteLine(output);
             Log.Debug($"{sw.ElapsedMilliseconds} ms");
-            if (Environment.GetEnvironmentVariable("XPPGRAFT_TIMING") == "1") Console.Error.WriteLine($"[{sw.ElapsedMilliseconds} ms]");
+            if (Environment.GetEnvironmentVariable("XPPLENS_TIMING") == "1") Console.Error.WriteLine($"[{sw.ElapsedMilliseconds} ms]");
             break;
         }
     }

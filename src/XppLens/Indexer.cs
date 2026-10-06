@@ -2,7 +2,7 @@ using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace XppGraft;
+namespace XppLens;
 
 public sealed class SyncStats
 {
@@ -27,7 +27,7 @@ public sealed class WriterLock : IDisposable
         {
             _held = true;
         }
-        if (!_held) throw new TimeoutException("index writer lock is held by another xppgraft process");
+        if (!_held) throw new TimeoutException("index writer lock is held by another xpplens process");
     }
 
     public void Dispose()
@@ -53,7 +53,7 @@ public sealed class Indexer(Config cfg)
     public static Mutex CreateWriterMutex(string indexPath, out string name)
     {
         var hash = Convert.ToHexString(SHA1.HashData(Encoding.UTF8.GetBytes(Path.GetFullPath(indexPath).ToLowerInvariant())))[..16];
-        name = $@"Local\xppgraft-writer-{hash}";
+        name = $@"Local\xpplens-writer-{hash}";
         return new Mutex(false, name);
     }
 

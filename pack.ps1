@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Builds the xpp-graft distribution package (ZIP) for installing on another machine.
+    Builds the xpp-lens distribution package (ZIP) for installing on another machine.
 
 .DESCRIPTION
     By default publishes a self-contained build (single EXE): nothing needs to be installed
@@ -20,8 +20,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$proj = Join-Path $PSScriptRoot 'src\XppGraft\XppGraft.csproj'
-$stage = Join-Path $OutDir 'xpp-graft'
+$proj = Join-Path $PSScriptRoot 'src\XppLens\XppLens.csproj'
+$stage = Join-Path $OutDir 'xpp-lens'
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
 
 if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
@@ -51,8 +51,9 @@ $size = [math]::Round((Get-ChildItem $stage -Recurse -File | Measure-Object Leng
 Write-Host "package: $stage ($size MB)" -ForegroundColor Cyan
 
 if (-not $NoZip) {
-    $version = (Get-Date -Format 'yyyyMMdd')
-    $zip = Join-Path $OutDir "xpp-graft-$version.zip"
+    $version = ([xml](Get-Content $proj -Raw)).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
+    if (-not $version) { $version = Get-Date -Format 'yyyyMMdd' }
+    $zip = Join-Path $OutDir "xpp-lens-$version.zip"
     if (Test-Path $zip) { Remove-Item $zip -Force }
     Compress-Archive -Path $stage -DestinationPath $zip
     Write-Host "zip: $zip ($([math]::Round((Get-Item $zip).Length / 1MB, 1)) MB)" -ForegroundColor Cyan

@@ -1,4 +1,4 @@
-namespace XppGraft.Tests;
+namespace XppLens.Tests;
 
 /// <summary>End to end: XML fixtures → index → the answers the MCP tools return.</summary>
 [Collection("index")]

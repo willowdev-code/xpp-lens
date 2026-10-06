@@ -1,4 +1,4 @@
-namespace XppGraft.Tests;
+namespace XppLens.Tests;
 
 /// <summary>Lexer, header parsing and reference extraction on X++ snippets (no index needed).</summary>
 public class AnalyzerTests
@@ -193,8 +193,8 @@ public class HelperTests
     [Fact]
     public void Usage_log_round_trip_and_report()
     {
-        var dir = Path.Combine(Path.GetTempPath(), "xppgraft-usage-" + Guid.NewGuid().ToString("N")[..8]);
-        Environment.SetEnvironmentVariable("XPPGRAFT_USAGE_DIR", dir);
+        var dir = Path.Combine(Path.GetTempPath(), "xpplens-usage-" + Guid.NewGuid().ToString("N")[..8]);
+        Environment.SetEnvironmentVariable("XPPLENS_USAGE_DIR", dir);
         var enabled = Usage.Enabled;
         try
         {
@@ -214,7 +214,7 @@ public class HelperTests
         finally
         {
             Usage.Enabled = enabled;
-            Environment.SetEnvironmentVariable("XPPGRAFT_USAGE_DIR", null);
+            Environment.SetEnvironmentVariable("XPPLENS_USAGE_DIR", null);
             Directory.Delete(dir, true);
         }
     }

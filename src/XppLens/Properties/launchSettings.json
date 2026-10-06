@@ -3,74 +3,74 @@
     "status": {
       "commandName": "Project",
       "commandLineArgs": "status",
-      "environmentVariables": { "XPPGRAFT_CONFIG": "C:\\Tools\\xpp-graft\\xppgraft.json" }
+      "environmentVariables": { "XPPLENS_CONFIG": "C:\\Tools\\xpp-lens\\xpplens.json" }
     },
     "stats (MCP usage)": {
       "commandName": "Project",
       "commandLineArgs": "stats --days 7",
-      "environmentVariables": { "XPPGRAFT_CONFIG": "C:\\Tools\\xpp-graft\\xppgraft.json" }
+      "environmentVariables": { "XPPLENS_CONFIG": "C:\\Tools\\xpp-lens\\xpplens.json" }
     },
     "find (batch)": {
       "commandName": "Project",
       "commandLineArgs": "find \"CustTable.*;SalesLine.createLine\" --limit 10",
-      "environmentVariables": { "XPPGRAFT_CONFIG": "C:\\Tools\\xpp-graft\\xppgraft.json" }
+      "environmentVariables": { "XPPLENS_CONFIG": "C:\\Tools\\xpp-lens\\xpplens.json" }
     },
     "object (form controls)": {
       "commandName": "Project",
       "commandLineArgs": "object CustTable --type form --sections controls --depth 2",
-      "environmentVariables": { "XPPGRAFT_CONFIG": "C:\\Tools\\xpp-graft\\xppgraft.json" }
+      "environmentVariables": { "XPPLENS_CONFIG": "C:\\Tools\\xpp-lens\\xpplens.json" }
     },
     "method (fragment)": {
       "commandName": "Project",
       "commandLineArgs": "method SalesTable validateWrite --type table --match \"checkFailed|error\" --context 2",
-      "environmentVariables": { "XPPGRAFT_CONFIG": "C:\\Tools\\xpp-graft\\xppgraft.json" }
+      "environmentVariables": { "XPPLENS_CONFIG": "C:\\Tools\\xpp-lens\\xpplens.json" }
     },
     "callers (incl. standard)": {
       "commandName": "Project",
       "commandLineArgs": "callers CustTable creditMax --limit 30",
-      "environmentVariables": { "XPPGRAFT_CONFIG": "C:\\Tools\\xpp-graft\\xppgraft.json" }
+      "environmentVariables": { "XPPLENS_CONFIG": "C:\\Tools\\xpp-lens\\xpplens.json" }
     },
     "scaffold coc": {
       "commandName": "Project",
       "commandLineArgs": "scaffold coc CustTable validateWrite --type table",
-      "environmentVariables": { "XPPGRAFT_CONFIG": "C:\\Tools\\xpp-graft\\xppgraft.json" }
+      "environmentVariables": { "XPPLENS_CONFIG": "C:\\Tools\\xpp-lens\\xpplens.json" }
     },
     "security": {
       "commandName": "Project",
       "commandLineArgs": "security CustTable --type display",
-      "environmentVariables": { "XPPGRAFT_CONFIG": "C:\\Tools\\xpp-graft\\xppgraft.json" }
+      "environmentVariables": { "XPPLENS_CONFIG": "C:\\Tools\\xpp-lens\\xpplens.json" }
     },
     "join": {
       "commandName": "Project",
       "commandLineArgs": "join CustInvoiceTrans CustTable",
-      "environmentVariables": { "XPPGRAFT_CONFIG": "C:\\Tools\\xpp-graft\\xppgraft.json" }
+      "environmentVariables": { "XPPLENS_CONFIG": "C:\\Tools\\xpp-lens\\xpplens.json" }
     },
     "entity": {
       "commandName": "Project",
       "commandLineArgs": "entity CustCustomerV3Entity --sections props,datasources,keys",
-      "environmentVariables": { "XPPGRAFT_CONFIG": "C:\\Tools\\xpp-graft\\xppgraft.json" }
+      "environmentVariables": { "XPPLENS_CONFIG": "C:\\Tools\\xpp-lens\\xpplens.json" }
     },
     "changed (3 days)": {
       "commandName": "Project",
       "commandLineArgs": "changed --since 3d",
-      "environmentVariables": { "XPPGRAFT_CONFIG": "C:\\Tools\\xpp-graft\\xppgraft.json" }
+      "environmentVariables": { "XPPLENS_CONFIG": "C:\\Tools\\xpp-lens\\xpplens.json" }
     },
     "build-errors": {
       "commandName": "Project",
       "commandLineArgs": "build-errors --severity warning",
-      "environmentVariables": { "XPPGRAFT_CONFIG": "C:\\Tools\\xpp-graft\\xppgraft.json" }
+      "environmentVariables": { "XPPLENS_CONFIG": "C:\\Tools\\xpp-lens\\xpplens.json" }
     },
     "build compiled packages": {
       "commandName": "Project",
       "commandLineArgs": "build --compiled-only --force",
-      "environmentVariables": { "XPPGRAFT_CONFIG": "C:\\Tools\\xpp-graft\\xppgraft.json" }
+      "environmentVariables": { "XPPLENS_CONFIG": "C:\\Tools\\xpp-lens\\xpplens.json" }
     },
     "verbose SQL (status)": {
       "commandName": "Project",
       "commandLineArgs": "status",
       "environmentVariables": {
-        "XPPGRAFT_CONFIG": "C:\\Tools\\xpp-graft\\xppgraft.json",
-        "XPPGRAFT_VERBOSE": "1"
+        "XPPLENS_CONFIG": "C:\\Tools\\xpp-lens\\xpplens.json",
+        "XPPLENS_VERBOSE": "1"
       }
     }
   }

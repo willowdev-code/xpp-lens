@@ -3,7 +3,7 @@ using System.Diagnostics;
 using ModelContextProtocol;
 using ModelContextProtocol.Server;
 
-namespace XppGraft;
+namespace XppLens;
 
 [McpServerToolType]
 public static class McpTools
@@ -43,7 +43,7 @@ public static class McpTools
         {
             error = true;
             Log.Warn(ex.ToString());
-            throw new McpException($"xppgraft error: {ex.Message}");
+            throw new McpException($"xpplens error: {ex.Message}");
         }
         catch
         {

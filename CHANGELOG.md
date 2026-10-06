@@ -1,7 +1,19 @@
 # Changelog
 
-All notable changes to xpp-graft. Versions follow `<Version>` in `src/XppGraft/XppGraft.csproj`;
-release tags are `vX.Y.Z`.
+All notable changes to xpp-lens (called xpp-graft up to 1.2.0). Versions follow `<Version>` in
+`src/XppLens/XppLens.csproj`; release tags are `vX.Y.Z`.
+
+## 1.2.1 — 2026-10-06
+
+### Changed
+- **Renamed from xpp-graft to xpp-lens**, to avoid confusion with the unrelated
+  [Graft](https://github.com/trailhq/Graft) project. Program `xpplens.exe`, MCP server `xpp-lens`, configuration
+  `xpplens.json`, default folders `C:\Tools\xpp-lens` and `%LOCALAPPDATA%\xpp-lens`, environment variables
+  `XPPLENS_CONFIG` / `XPPLENS_VERBOSE` / `XPPLENS_TIMING` / `XPPLENS_USAGE`. The MCP tool names (`xpp_find`, …)
+  are unchanged.
+- `install.ps1` takes over an existing xpp-graft installation: settings (incl. label languages), the index and the
+  usage log move over without a rebuild, and the old MCP entries are removed. The old folder is left for you to delete.
+- Release packages are named after the version (`xpp-lens-1.2.1.zip`).
 
 ## 1.2.0 — 2026-10-06
 

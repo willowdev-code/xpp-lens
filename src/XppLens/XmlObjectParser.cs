@@ -1,6 +1,6 @@
 using System.Xml;
 
-namespace XppGraft;
+namespace XppLens;
 
 /// <summary>
 /// Standard: dictionary tier (signatures, members without controls, extension/handler attributes).

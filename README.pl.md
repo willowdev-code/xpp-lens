@@ -1,4 +1,4 @@
-# xpp-graft — indeks kodu X++ (D365 F&O) jako serwer MCP
+# xpp-lens — indeks kodu X++ (D365 F&O) jako serwer MCP
 
 [English](README.md) | **Polski**
 
@@ -7,35 +7,37 @@ Claude korzysta z niego przez MCP zamiast czytać wielkie pliki XML z AOT. Zmian
 
 © 2026 WillowDev. Udostępnione na [licencji MIT](LICENSE).
 
+Niezależny projekt inspirowany [Graftem](https://github.com/trailhq/Graft) (graf kodu dla agentów programistycznych w wielu językach); xpp-lens nie dzieli z nim kodu i jest zbudowany pod X++ i AOT. Do wersji 1.2.0 nazywał się xpp-graft — `install.ps1` przejmuje istniejącą instalację xpp-graft (ustawienia, indeks, rejestrację w Claude).
+
 ## Instalacja na nowej maszynie
 
 Paczki instalacyjnej nie ma w repozytorium (`dist\` jest pomijany przez `.gitignore`). Są dwie drogi:
 
 **A. Z gotowej paczki** — na maszynie docelowej nie trzeba niczego instalować, nawet .NET.
 
-1. Pobierz `xpp-graft-RRRRMMDD.zip` z zakładki **Releases** tego repozytorium.
+1. Pobierz `xpp-lens-X.Y.Z.zip` z zakładki **Releases** tego repozytorium.
 2. Rozpakuj i w zwykłym PowerShellu (nie jako administrator) uruchom:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\xpp-graft\install.ps1 -Languages en-US,pl
+powershell -ExecutionPolicy Bypass -File .\xpp-lens\install.ps1 -Languages en-US,pl
 ```
 
 **B. Z kodu źródłowego** — wymaga .NET 9 SDK.
 
 ```powershell
-git clone https://github.com/willowdev-code/xpp-graft.git C:\Dev\xpp-graft
-cd C:\Dev\xpp-graft
-.\pack.ps1                     # tworzy dist\xpp-graft\ i dist\xpp-graft-RRRRMMDD.zip
-powershell -ExecutionPolicy Bypass -File .\dist\xpp-graft\install.ps1 -Languages en-US,pl
+git clone https://github.com/willowdev-code/xpp-lens.git C:\Dev\xpp-lens
+cd C:\Dev\xpp-lens
+.\pack.ps1                     # tworzy dist\xpp-lens\ i dist\xpp-lens-X.Y.Z.zip
+powershell -ExecutionPolicy Bypass -File .\dist\xpp-lens\install.ps1 -Languages en-US,pl
 ```
 
-Instalator kopiuje pliki do `C:\Tools\xpp-graft`, wykrywa `PackagesLocalDirectory` (z `web.config` AOS-a albo
+Instalator kopiuje pliki do `C:\Tools\xpp-lens`, wykrywa `PackagesLocalDirectory` (z `web.config` AOS-a albo
 układu katalogów), zapisuje konfigurację, rejestruje serwer w Claude Desktop i Claude Code, a na końcu buduje indeks
 (modele własne ok. minuty, standard Microsoftu jednorazowo 20–90 minut, zależnie od dysku). Przed instalacją zamknij
 Claude'a. Po instalacji uruchom go ponownie.
 
 Nowe wydanie: `.\pack.ps1`, a powstały ZIP dołącz do nowego wydania w zakładce Releases (tag `vX.Y.Z` zgodny
-z `<Version>` w `src\XppGraft\XppGraft.csproj`), jako opis daj odpowiednią sekcję `CHANGELOG.md`.
+z `<Version>` w `src\XppLens\XppLens.csproj`), jako opis daj odpowiednią sekcję `CHANGELOG.md`.
 
 Przydatne parametry:
 
@@ -54,19 +56,19 @@ Nowy pakiet dystrybucyjny: `pack.ps1` (dodaj `-FrameworkDependent`, jeśli wolis
 ## Konfiguracja po instalacji
 
 ```powershell
-xppgraft config                                   # pokaż ustawienia
-xppgraft config --add-language de                 # dołóż język etykiet
-xppgraft config --add-full-model XPL              # model/pakiet do pełnego indeksu
-xppgraft config --add-standard-model ContosoIsv   # model do poziomu standardowego
-xppgraft config --add-standard-publisher "Contoso"
-xppgraft config --packages-dir K:\AosService\PackagesLocalDirectory
-xppgraft config --standard-code false             # bez wywołań z kodu Microsoftu (mniejszy indeks)
-xppgraft config --usage-log false                 # nie zapisuj wywołań MCP dla 'xppgraft stats'
-xppgraft detect [--set]                           # wykryj PackagesLocalDirectory
-xppgraft build                                    # zastosuj zmiany
+xpplens config                                   # pokaż ustawienia
+xpplens config --add-language de                 # dołóż język etykiet
+xpplens config --add-full-model XPL              # model/pakiet do pełnego indeksu
+xpplens config --add-standard-model ContosoIsv   # model do poziomu standardowego
+xpplens config --add-standard-publisher "Contoso"
+xpplens config --packages-dir K:\AosService\PackagesLocalDirectory
+xpplens config --standard-code false             # bez wywołań z kodu Microsoftu (mniejszy indeks)
+xpplens config --usage-log false                 # nie zapisuj wywołań MCP dla 'xpplens stats'
+xpplens detect [--set]                           # wykryj PackagesLocalDirectory
+xpplens build                                    # zastosuj zmiany
 ```
 
-Ustawienia siedzą w `xppgraft.json` obok katalogu `bin` — można je też edytować ręcznie.
+Ustawienia siedzą w `xpplens.json` obok katalogu `bin` — można je też edytować ręcznie.
 
 ## Trzy poziomy indeksu
 
@@ -82,19 +84,19 @@ referencje (pola, typy, etykiety) i natychmiastowy `xpp_grep`. Kosztem jest dłu
 Rozmiar indeksu: ok. 0,6 GB bez wywołań standardu, ok. 0,9–1 GB z nimi (typowa maszyna deweloperska, ok. 190 tys. plików standardu).
 
 Pakiety skompilowane przebudowują się same, gdy zmieni się ich `.xref`, `.md` albo zasoby. Ręcznie:
-`xppgraft build --compiled-only --force`. Katalogi, których nie da się zaindeksować wcale, wypisuje `xppgraft status`
+`xpplens build --compiled-only --force`. Katalogi, których nie da się zaindeksować wcale, wypisuje `xpplens status`
 w linii „on disk but NOT indexed”.
 
 ## Uprawnienia do indeksu
 
-Domyślnie indeks trafia do `%LOCALAPPDATA%\xpp-graft\index\xpp.db`, czyli tam, gdzie użytkownik uruchamiający
+Domyślnie indeks trafia do `%LOCALAPPDATA%\xpp-lens\index\xpp.db`, czyli tam, gdzie użytkownik uruchamiający
 Claude'a ma prawo zapisu. Jeśli wskażesz indeks w katalogu instalacji, a instalację przeprowadzisz jako administrator,
 Claude (działający bez podniesionych uprawnień) nie będzie mógł go aktualizować — zobaczysz wtedy w odpowiedziach
 komunikat `index is read-only`, a wyniki zamarzną na stanie z chwili budowy. Naprawa:
 
 ```powershell
-xppgraft config --index-path "$env:LOCALAPPDATA\xpp-graft\index\xpp.db"
-xppgraft build
+xpplens config --index-path "$env:LOCALAPPDATA\xpp-lens\index\xpp.db"
+xpplens build
 ```
 
 W trybie tylko do odczytu `xpp_method` i `xpp_object` i tak zwracają aktualny kod (parsują plik na żywo),
@@ -105,7 +107,7 @@ ale `xpp_find`, `xpp_callers` i `xpp_refs` korzystają z zamrożonego indeksu.
 - `FileSystemWatcher` na katalogach modeli pełnego poziomu — zapis z Visual Studio widoczny przy następnym zapytaniu.
 - Skan dat plików przy starcie i co `rescanIntervalSeconds` (domyślnie 5 min) — wyłapuje Get Latest z Team Explorera.
 - Standard: odcisk pakietu (deskryptory + `bin\*.dll`) — przebudowa tylko po aktualizacji platformy.
-- Nowa wersja xpp-graft ze zmienionym analizatorem kodu: modele własne są analizowane od nowa raz, przy następnym
+- Nowa wersja xpp-lens ze zmienionym analizatorem kodu: modele własne są analizowane od nowa raz, przy następnym
   starcie (ok. minuty); poziom standardowy przebudowuje się raz w tle, pakiet po pakiecie — przerwana przebudowa
   wznawia się od miejsca przerwania. Postęp pokazuje `xpp_status`.
 - Zapisy serializowane nazwanym muteksem, więc Claude Desktop i Claude Code mogą działać równolegle.
@@ -116,22 +118,22 @@ Na co odpowiada każde narzędzie MCP, kiedy Claude powinien po nie sięgnąć i
 
 | Narzędzie | Odpowiada na | Kiedy używać | Przykład w CLI |
 |---|---|---|---|
-| `xpp_find` | gdzie są obiekty, metody, pola (`*`, `?`, `Obiekt.składowa`, nazwy rozszerzeń z kropką) | znasz nazwę albo jej fragment | `xppgraft find "Cust*Invoice*; SalesLine.createLine"` |
-| `xpp_object` | szkielet obiektu: właściwości z etykietami, pola, indeksy, relacje, źródła danych, drzewo kontrolek/menu, metody z zakresami linii, rozszerzenia | potrzebna struktura, nie kod | `xppgraft object CustTable --type table` |
-| `xpp_method` | kod metody ze ścieżką pliku i zakresem linii, jej wrappery CoC i handlery | potrzebny kod; przy długich metodach z `match`/`lines` | `xppgraft method SalesTable validateWrite --match "checkFailed" --context 2` |
-| `xpp_callers` | kto wywołuje metodę — najpierw kod własny, potem pakiety skompilowane i kod Microsoftu; z wywołaniami łańcuchowymi (`Table::find().m()`) | wpływ zmiany, „gdzie to jest używane” | `xppgraft callers CustTable creditMax` |
-| `xpp_callees` | czego używa metoda: wywołania (z typem odbiorcy w łańcuchach), new, pola, enumy, intrinsics, etykiety | zrozumienie metody bez czytania jej | `xppgraft callees SalesFormLetter run` |
-| `xpp_refs` | każde użycie klasy, tabeli, pola, EDT, enuma, pozycji menu, etykiety | zmiana nazwy, usuwanie, użycia pola | `xppgraft refs CustTable --member CreditMax` |
-| `xpp_extensions` | klasy CoC (z owiniętymi metodami), rozszerzenia tabel/formularzy, event handlery, klasy pochodne | „co już zmienia ten obiekt” | `xppgraft ext SalesTable` |
-| `xpp_scaffold` | gotowy X++: wrapper CoC, handler zdarzeń tabeli/formularza/źródła danych/kontrolki, subskrybent delegata, handler pre/post — dokładna sygnatura, nazewnictwo z twoich modeli | przed pisaniem rozszerzenia | `xppgraft scaffold coc SalesTable validateWrite --type table` |
-| `xpp_build_errors` | błędy/ostrzeżenia ostatniego builda w Visual Studio, przypięte do linii w pliku XML | po buildzie — poprawki bez wklejania logów | `xppgraft build-errors --severity warning` |
-| `xpp_security` | pozycja menu / formularz → privileges (nadany dostęp) → duties → role, oraz w drugą stronę dla privilege, duty, roli | pytania o dostęp, nowe pozycje menu | `xppgraft security CustTable --type display` |
-| `xpp_join` | najkrótsza ścieżka relacji między dwiema tabelami jako gotowy `select … join … where` | pisanie zapytania przez kilka tabel | `xppgraft join CustInvoiceTrans CustTable` |
-| `xpp_entity` | encja danych: nazwy publiczne, tabela staging, drzewo źródeł danych ze złączeniami, mapowanie pól, klucze; albo encje używające danej tabeli | praca z DMF / OData | `xppgraft entity CustCustomerV3Entity` |
-| `xpp_changed` | obiekty zmienione na dysku od podanego czasu, w podziale na modele | po Get Latest, przegląd własnej pracy | `xppgraft changed --since 3d` |
-| `xpp_grep` | regex po ciałach metod (modele własne; standard z filtrem modelu) | wzorce tekstu, których inne narzędzia nie wyrażą | `xppgraft grep "ttsbegin" --model Contoso*` |
-| `xpp_label` | id etykiety → teksty we wszystkich językach, albo tekst → istniejące id etykiet | ponowne użycie etykiet | `xppgraft label "Credit limit"` |
-| `xpp_status` | stan indeksu, poziomy, praca w tle | sprawdzenie aktualności | `xppgraft status` |
+| `xpp_find` | gdzie są obiekty, metody, pola (`*`, `?`, `Obiekt.składowa`, nazwy rozszerzeń z kropką) | znasz nazwę albo jej fragment | `xpplens find "Cust*Invoice*; SalesLine.createLine"` |
+| `xpp_object` | szkielet obiektu: właściwości z etykietami, pola, indeksy, relacje, źródła danych, drzewo kontrolek/menu, metody z zakresami linii, rozszerzenia | potrzebna struktura, nie kod | `xpplens object CustTable --type table` |
+| `xpp_method` | kod metody ze ścieżką pliku i zakresem linii, jej wrappery CoC i handlery | potrzebny kod; przy długich metodach z `match`/`lines` | `xpplens method SalesTable validateWrite --match "checkFailed" --context 2` |
+| `xpp_callers` | kto wywołuje metodę — najpierw kod własny, potem pakiety skompilowane i kod Microsoftu; z wywołaniami łańcuchowymi (`Table::find().m()`) | wpływ zmiany, „gdzie to jest używane” | `xpplens callers CustTable creditMax` |
+| `xpp_callees` | czego używa metoda: wywołania (z typem odbiorcy w łańcuchach), new, pola, enumy, intrinsics, etykiety | zrozumienie metody bez czytania jej | `xpplens callees SalesFormLetter run` |
+| `xpp_refs` | każde użycie klasy, tabeli, pola, EDT, enuma, pozycji menu, etykiety | zmiana nazwy, usuwanie, użycia pola | `xpplens refs CustTable --member CreditMax` |
+| `xpp_extensions` | klasy CoC (z owiniętymi metodami), rozszerzenia tabel/formularzy, event handlery, klasy pochodne | „co już zmienia ten obiekt” | `xpplens ext SalesTable` |
+| `xpp_scaffold` | gotowy X++: wrapper CoC, handler zdarzeń tabeli/formularza/źródła danych/kontrolki, subskrybent delegata, handler pre/post — dokładna sygnatura, nazewnictwo z twoich modeli | przed pisaniem rozszerzenia | `xpplens scaffold coc SalesTable validateWrite --type table` |
+| `xpp_build_errors` | błędy/ostrzeżenia ostatniego builda w Visual Studio, przypięte do linii w pliku XML | po buildzie — poprawki bez wklejania logów | `xpplens build-errors --severity warning` |
+| `xpp_security` | pozycja menu / formularz → privileges (nadany dostęp) → duties → role, oraz w drugą stronę dla privilege, duty, roli | pytania o dostęp, nowe pozycje menu | `xpplens security CustTable --type display` |
+| `xpp_join` | najkrótsza ścieżka relacji między dwiema tabelami jako gotowy `select … join … where` | pisanie zapytania przez kilka tabel | `xpplens join CustInvoiceTrans CustTable` |
+| `xpp_entity` | encja danych: nazwy publiczne, tabela staging, drzewo źródeł danych ze złączeniami, mapowanie pól, klucze; albo encje używające danej tabeli | praca z DMF / OData | `xpplens entity CustCustomerV3Entity` |
+| `xpp_changed` | obiekty zmienione na dysku od podanego czasu, w podziale na modele | po Get Latest, przegląd własnej pracy | `xpplens changed --since 3d` |
+| `xpp_grep` | regex po ciałach metod (modele własne; standard z filtrem modelu) | wzorce tekstu, których inne narzędzia nie wyrażą | `xpplens grep "ttsbegin" --model Contoso*` |
+| `xpp_label` | id etykiety → teksty we wszystkich językach, albo tekst → istniejące id etykiet | ponowne użycie etykiet | `xpplens label "Credit limit"` |
+| `xpp_status` | stan indeksu, poziomy, praca w tle | sprawdzenie aktualności | `xpplens status` |
 
 ### Kilka zapytań w jednym wywołaniu i fragmenty metod
 
@@ -147,7 +149,7 @@ Duże drzewa (ponad 60 elementów) są zwijane do dwóch poziomów z licznikiem 
 
 | Parametr | Działanie | Przykład |
 |---|---|---|
-| `filter` | wildcard po nazwie lub ścieżce; wypisuje **pełne ścieżki** | `xppgraft object CustTable --type form --filter *PersonalTitle*` |
+| `filter` | wildcard po nazwie lub ścieżce; wypisuje **pełne ścieżki** | `xpplens object CustTable --type form --filter *PersonalTitle*` |
 | `parent` | tylko poddrzewo danego elementu (nazwa albo ścieżka) | `--parent TabGeneral` |
 | `depth` | liczba poziomów (pod `parent`, jeśli podany) | `--parent UpperGroup --depth 1` |
 
@@ -157,38 +159,38 @@ i `menuitem=<MenuItemName>`.
 
 ## Statystyki użycia
 
-Każde wywołanie MCP jest dopisywane do `%LOCALAPPDATA%\xpp-graft\usage\usage-RRRRMM.jsonl` (narzędzie, argumenty,
-rozmiar odpowiedzi, czas, czy wynik był pusty). Dziennik nigdy nie opuszcza maszyny. Podsumowuje go `xppgraft stats`:
+Każde wywołanie MCP jest dopisywane do `%LOCALAPPDATA%\xpp-lens\usage\usage-RRRRMM.jsonl` (narzędzie, argumenty,
+rozmiar odpowiedzi, czas, czy wynik był pusty). Dziennik nigdy nie opuszcza maszyny. Podsumowuje go `xpplens stats`:
 
 ```powershell
-xppgraft stats --days 7 --top 10
+xpplens stats --days 7 --top 10
 ```
 
 Pokazuje dla każdego narzędzia liczbę wywołań, średni / p95 / maksymalny rozmiar odpowiedzi w tokenach (znaki / 4),
 czas i odsetek pustych odpowiedzi, a do tego największe i najwolniejsze wywołania oraz ostatnie puste odpowiedzi —
-miejsca, gdzie narzędzie nie pomogło i Claude zapewne wrócił do czytania plików. Wyłączenie: `xppgraft config --usage-log false`.
+miejsca, gdzie narzędzie nie pomogło i Claude zapewne wrócił do czytania plików. Wyłączenie: `xpplens config --usage-log false`.
 
 ## CLI
 
 ```
-xppgraft find|object|method|callers|callees|refs|ext|scaffold|build-errors|security|join|entity|changed|grep|label …
-xppgraft build [--full-only] [--std-only] [--compiled-only] [--force]
-xppgraft status | stats | detect | config | register | unregister | mcp | version
+xpplens find|object|method|callers|callees|refs|ext|scaffold|build-errors|security|join|entity|changed|grep|label …
+xpplens build [--full-only] [--std-only] [--compiled-only] [--force]
+xpplens status | stats | detect | config | register | unregister | mcp | version
 ```
 
-`xppgraft help` wypisuje wszystkie opcje. Zmienne: `XPPGRAFT_CONFIG` (inna konfiguracja), `XPPGRAFT_VERBOSE=1`
-(czasy zapytań SQL na stderr), `XPPGRAFT_TIMING=1` (łączny czas zapytania w CLI).
+`xpplens help` wypisuje wszystkie opcje. Zmienne: `XPPLENS_CONFIG` (inna konfiguracja), `XPPLENS_VERBOSE=1`
+(czasy zapytań SQL na stderr), `XPPLENS_TIMING=1` (łączny czas zapytania w CLI).
 
 ## Rozwój narzędzia
 
-Kod źródłowy mieszka **osobno od instalacji**, domyślnie w `C:\Dev\xpp-graft`:
+Kod źródłowy mieszka **osobno od instalacji**, domyślnie w `C:\Dev\xpp-lens`:
 
 ```
-C:\Dev\xpp-graft\
-  xpp-graft.sln             solucja dla Visual Studio 2022
-  src\XppGraft\*.cs         kod
-  src\XppGraft\Properties\launchSettings.json   profile uruchomieniowe (F5)
-  tests\XppGraft.Tests\     testy xUnit + przykładowe XML-e z AOT (Fixtures)
+C:\Dev\xpp-lens\
+  xpp-lens.sln             solucja dla Visual Studio 2022
+  src\XppLens\*.cs         kod
+  src\XppLens\Properties\launchSettings.json   profile uruchomieniowe (F5)
+  tests\XppLens.Tests\     testy xUnit + przykładowe XML-e z AOT (Fixtures)
   build.ps1                 kompilacja; -Deploy podmienia binaria w instalacji
   pack.ps1                  pakiet ZIP do instalacji gdzie indziej
   install.ps1 uninstall.ps1 README.md README.pl.md CHANGELOG.md LICENSE
@@ -197,22 +199,22 @@ C:\Dev\xpp-graft\
 
 ### Visual Studio
 
-Otwórz `C:\Dev\xpp-graft\xpp-graft.sln` w **Visual Studio 2022** (17.12 lub nowszym — VS 2019 nie obsługuje .NET 9).
+Otwórz `C:\Dev\xpp-lens\xpp-lens.sln` w **Visual Studio 2022** (17.12 lub nowszym — VS 2019 nie obsługuje .NET 9).
 Budowanie: Ctrl+Shift+B. Na pasku narzędzi obok zielonej strzałki wybierz profil z `launchSettings.json`
 (`status`, `stats (MCP usage)`, `find (batch)`, `object (form controls)`, `method (fragment)`, `callers (incl. standard)`,
 `scaffold coc`, `security`, `join`, `entity`, `changed (3 days)`, `build-errors`, `build compiled packages`,
 `verbose SQL (status)`) i naciśnij F5 — program uruchomi się z debuggerem na prawdziwej konfiguracji i indeksie
-(`XPPGRAFT_CONFIG` jest ustawione w profilu). Własny profil: Debug → *XppGraft Debug Properties* → nowy profil,
+(`XPPLENS_CONFIG` jest ustawione w profilu). Własny profil: Debug → *XppLens Debug Properties* → nowy profil,
 w „Command line arguments” wpisz polecenie CLI.
 
 Serwera MCP nie debuguje się przez F5 (rozmawia przez stdin/stdout z Claude'em). Żeby podejrzeć go w działaniu,
 wdroż wersję Debug (`.\build.ps1 -Deploy -Configuration Debug`), zrestartuj Claude'a i w VS użyj
-Debug → *Attach to Process* → `xppgraft.exe`.
+Debug → *Attach to Process* → `xpplens.exe`.
 
 ### Testy
 
 Testy nigdy nie dotykają twojego `PackagesLocalDirectory` ani twojego indeksu. Kopiują mały zestaw przykładowych
-pakietów z `tests\XppGraft.Tests\Fixtures\PackagesLocalDirectory` („microsoftowy” pakiet `StdBase` i własny pakiet
+pakietów z `tests\XppLens.Tests\Fixtures\PackagesLocalDirectory` („microsoftowy” pakiet `StdBase` i własny pakiet
 `ContosoCore`, wyłącznie neutralne nazwy) do katalogu tymczasowego, budują tam indeks i sprawdzają odpowiedzi narzędzi.
 
 **W Visual Studio:** Test → *Test Explorer* (Ctrl+E, T) → *Run All Tests* (Ctrl+R, A). Pierwsze uruchomienie
@@ -221,7 +223,7 @@ zbuduje solucję; pojedynczy test można debugować: prawy przycisk → *Debug*.
 **Z linii poleceń:**
 
 ```powershell
-cd C:\Dev\xpp-graft
+cd C:\Dev\xpp-lens
 dotnet test                                              # wszystkie testy (ok. 10 s)
 dotnet test --filter "FullyQualifiedName~QueryTests"     # tylko testy narzędzi od początku do końca
 dotnet test --filter "Name~Scaffold"                     # testy, których nazwa zawiera "Scaffold"
@@ -256,7 +258,7 @@ Pętla pracy:
 
 ```powershell
 .\build.ps1                 # kompilacja do .\build
-.\build\xppgraft.exe find CustTable   # test z linii poleceń, bez restartu Claude'a
+.\build\xpplens.exe find CustTable   # test z linii poleceń, bez restartu Claude'a
 dotnet test                 # testy
 .\build.ps1 -Deploy         # podmiana w instalacji (zatrzymuje działające procesy)
 .\build.ps1 -Test -Deploy   # to samo, ale tylko gdy wszystkie testy przejdą
@@ -264,7 +266,7 @@ dotnet test                 # testy
 
 Po `-Deploy` zrestartuj Claude Desktop i sesje Claude Code — MCP ładuje binarium przy starcie.
 
-Zmiana `Store.SchemaVersion` kasuje indeks i wymusza `xppgraft build`.
+Zmiana `Store.SchemaVersion` kasuje indeks i wymusza `xpplens build`.
 
 Dokumentacja jest w dwóch językach: każdą zmianę w `README.pl.md` trzeba odzwierciedlić w `README.md` w tym samym commicie.
 

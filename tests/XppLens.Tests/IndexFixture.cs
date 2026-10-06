@@ -1,4 +1,4 @@
-namespace XppGraft.Tests;
+namespace XppLens.Tests;
 
 /// <summary>
 /// Builds an index of the sample PackagesLocalDirectory in Fixtures (a "Microsoft" package StdBase and a
@@ -16,7 +16,7 @@ public sealed class IndexFixture : IDisposable
 
     public IndexFixture()
     {
-        Root =Path.Combine(Path.GetTempPath(), "xppgraft-tests-" + Guid.NewGuid().ToString("N")[..8]);
+        Root =Path.Combine(Path.GetTempPath(), "xpplens-tests-" + Guid.NewGuid().ToString("N")[..8]);
         var packages = Path.Combine(Root, "PackagesLocalDirectory");
         CopyDir(Path.Combine(AppContext.BaseDirectory, "Fixtures", "PackagesLocalDirectory"), packages);
 

@@ -1,7 +1,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace XppGraft;
+namespace XppLens;
 
 /// <summary>What part of a method to return: lines matching a pattern and/or a file line range.</summary>
 public sealed record FragmentSpec(Regex? Match, string? MatchText, int From, int To, int Context)

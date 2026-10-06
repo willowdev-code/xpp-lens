@@ -1,6 +1,6 @@
 using System.Xml.Linq;
 
-namespace XppGraft;
+namespace XppLens;
 
 /// <param name="Binary">Compiled-only package (no Ax* XML): indexed from .xref / bin\*.md / Resources.</param>
 public sealed record ModelInfo(string Package, string Name, string Publisher, int Layer, string Dir, bool Full, bool Binary = false)
@@ -19,7 +19,7 @@ public static class Catalog
         if (string.IsNullOrWhiteSpace(cfg.PackagesDir) || !Directory.Exists(cfg.PackagesDir))
             throw new InvalidOperationException(
                 $"packagesDir is not set or does not exist ({(cfg.PackagesDir.Length == 0 ? "(empty)" : cfg.PackagesDir)}). " +
-                "Run 'xppgraft detect' or 'xppgraft config --packages-dir <path>'.");
+                "Run 'xpplens detect' or 'xpplens config --packages-dir <path>'.");
 
         foreach (var pkgDir in Directory.EnumerateDirectories(cfg.PackagesDir))
         {
@@ -150,8 +150,8 @@ public static class Catalog
 
 public static class Log
 {
-    public static bool Verbose { get; set; } = Environment.GetEnvironmentVariable("XPPGRAFT_VERBOSE") == "1";
-    public static void Info(string msg) => Console.Error.WriteLine($"[xppgraft] {msg}");
-    public static void Warn(string msg) => Console.Error.WriteLine($"[xppgraft] WARN {msg}");
-    public static void Debug(string msg) { if (Verbose) Console.Error.WriteLine($"[xppgraft] {msg}"); }
+    public static bool Verbose { get; set; } = Environment.GetEnvironmentVariable("XPPLENS_VERBOSE") == "1";
+    public static void Info(string msg) => Console.Error.WriteLine($"[xpplens] {msg}");
+    public static void Warn(string msg) => Console.Error.WriteLine($"[xpplens] WARN {msg}");
+    public static void Debug(string msg) { if (Verbose) Console.Error.WriteLine($"[xpplens] {msg}"); }
 }

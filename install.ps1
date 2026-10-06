@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Installs xpp-graft: an X++ (D365 F&O) code index served to Claude over MCP.
+    Installs xpp-lens: an X++ (D365 F&O) code index served to Claude over MCP.
 
 .DESCRIPTION
     Copies the files, determines the PackagesLocalDirectory folder (given or detected),
@@ -14,10 +14,16 @@
     .\install.ps1
 .EXAMPLE
     .\install.ps1 -PackagesDir K:\AosService\PackagesLocalDirectory -Languages en-US,de -FullModels XPL,XPLCore
+
+.NOTES
+    Upgrading from xpp-graft (the former name): the installer takes over its settings, moves its index
+    and usage log to %LOCALAPPDATA%\xpp-lens without rebuilding, and removes its MCP entries.
+    The old folder (-MigrateFrom, default C:\Tools\xpp-graft) is left for you to delete.
 #>
 [CmdletBinding()]
 param(
-    [string]   $InstallDir      = "C:\Tools\xpp-graft",
+    [string]   $InstallDir      = "C:\Tools\xpp-lens",
+    [string]   $MigrateFrom     = "C:\Tools\xpp-graft",
     [string]   $PackagesDir,
     [string[]] $Languages       = @('en-US'),
     [string]   $DisplayLanguage,
@@ -36,16 +42,58 @@ function Say($m) { Write-Host "  $m" }
 function Head($m) { Write-Host "`n$m" -ForegroundColor Cyan }
 
 $src = $PSScriptRoot
-if (-not (Test-Path (Join-Path $src 'bin\xppgraft.exe'))) {
-    throw "$src\bin\xppgraft.exe not found - run install.ps1 from an unpacked xpp-graft package."
+if (-not (Test-Path (Join-Path $src 'bin\xpplens.exe'))) {
+    throw "$src\bin\xpplens.exe not found - run install.ps1 from an unpacked xpp-lens package."
+}
+
+# Upgrade from the former name: settings, index and usage log move over, the old MCP entries go away.
+$migrated = $null
+$oldConfig = Join-Path $MigrateFrom 'xppgraft.json'
+$newConfig = Join-Path $InstallDir 'xpplens.json'
+if ((Test-Path $oldConfig) -and -not (Test-Path $newConfig)) {
+    Head "0/5 Taking over the former installation in $MigrateFrom (xpp-graft)"
+    $oldTarget = [IO.Path]::GetFullPath($MigrateFrom).TrimEnd('\') + '\'
+    Get-CimInstance Win32_Process -Filter "Name='xppgraft.exe'" |
+        Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($oldTarget, [StringComparison]::OrdinalIgnoreCase) } |
+        ForEach-Object {
+            Say "stopping xppgraft process (PID $($_.ProcessId))"
+            Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+        }
+    Start-Sleep -Milliseconds 500
+    $oldExe = Join-Path $MigrateFrom 'bin\xppgraft.exe'
+    if (Test-Path $oldExe) { & $oldExe unregister }
+
+    $migrated = Get-Content $oldConfig -Raw | ConvertFrom-Json
+    $oldRoot = Join-Path $env:LOCALAPPDATA 'xpp-graft'
+    $newRoot = Join-Path $env:LOCALAPPDATA 'xpp-lens'
+    $index = [string]$migrated.indexPath
+    # Only the default per-user location is moved; an index you placed elsewhere stays where it is.
+    if (-not $index -or $index.StartsWith($oldRoot, [StringComparison]::OrdinalIgnoreCase)) {
+        foreach ($sub in 'index', 'usage') {
+            $from = Join-Path $oldRoot $sub
+            $to = Join-Path $newRoot $sub
+            if ((Test-Path $from) -and -not (Test-Path $to)) {
+                New-Item -ItemType Directory -Force -Path $newRoot | Out-Null
+                Move-Item $from $to
+                Say "moved $from -> $to"
+            }
+        }
+        if ($index) {
+            $migrated.indexPath = [regex]::Replace($index, [regex]::Escape($oldRoot), $newRoot.Replace('$', '$$'), 'IgnoreCase')
+        }
+    }
+    New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
+    $migrated | ConvertTo-Json -Depth 5 | Set-Content $newConfig -Encoding UTF8
+    Say "settings taken over: $newConfig"
+    if (-not $PackagesDir -and $migrated.packagesDir) { $PackagesDir = [string]$migrated.packagesDir }
 }
 
 Head "1/5 Copying files to $InstallDir"
 $target = [IO.Path]::GetFullPath($InstallDir).TrimEnd('\') + '\'
-Get-CimInstance Win32_Process -Filter "Name='xppgraft.exe'" |
+Get-CimInstance Win32_Process -Filter "Name='xpplens.exe'" |
     Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($target, [StringComparison]::OrdinalIgnoreCase) } |
     ForEach-Object {
-        Say "stopping running xppgraft process (PID $($_.ProcessId))"
+        Say "stopping running xpplens process (PID $($_.ProcessId))"
         Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
     }
 New-Item -ItemType Directory -Force -Path (Join-Path $InstallDir 'bin') | Out-Null
@@ -60,7 +108,7 @@ else {
         if (Test-Path (Join-Path $src $f)) { Copy-Item (Join-Path $src $f) $InstallDir -Force }
     }
 }
-$exe = Join-Path $InstallDir 'bin\xppgraft.exe'
+$exe = Join-Path $InstallDir 'bin\xpplens.exe'
 Say "done: $exe"
 
 Head "2/5 PackagesLocalDirectory folder"
@@ -93,7 +141,9 @@ if (-not $PackagesDir) {
 Say "using: $PackagesDir"
 
 Head "3/5 Configuration"
-$cfgArgs = @('config', '--packages-dir', $PackagesDir, '--languages', ($Languages -join ','))
+$cfgArgs = @('config', '--packages-dir', $PackagesDir)
+# Taken-over settings keep their languages unless -Languages is given explicitly.
+if (-not $migrated -or $PSBoundParameters.ContainsKey('Languages')) { $cfgArgs += @('--languages', ($Languages -join ',')) }
 if ($DisplayLanguage) { $cfgArgs += @('--display-language', $DisplayLanguage) }
 if ($FullModels.Count)     { $cfgArgs += @('--full-models', ($FullModels -join ',')) }
 if ($StandardModels.Count) { $cfgArgs += @('--standard-models', ($StandardModels -join ',')) }
@@ -123,6 +173,7 @@ else {
 }
 
 Head "Done"
+if ($migrated) { Say "The former folder $MigrateFrom is no longer used - delete it when you like." }
 Say "Quit and restart Claude Desktop; start Claude Code sessions again."
 Say "Change settings later:  `"$exe`" config --add-language de --add-full-model XPL"
 Say "Index status:           `"$exe`" status"

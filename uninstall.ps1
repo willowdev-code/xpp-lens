@@ -1,10 +1,10 @@
 <#
 .SYNOPSIS
-    Removes xpp-graft: the MCP entries in Claude and, optionally, the index and program files.
+    Removes xpp-lens: the MCP entries in Claude and, optionally, the index and program files.
 
 .DESCRIPTION
     Only MCP entries that point to this installation are removed. The index location is read
-    from the configuration (by default %LOCALAPPDATA%\xpp-graft\index); only the index files
+    from the configuration (by default %LOCALAPPDATA%\xpp-lens\index); only the index files
     (xpp.db*) are deleted, never other content of that folder. Source code and build outputs
     found in the installation folder (src, dist, build, *.cs, *.csproj) are left untouched.
     Nothing in PackagesLocalDirectory is ever modified.
@@ -28,9 +28,9 @@ function Confirm-Step($question) {
     if ($All -or $Force) { return $true }
     return (Read-Host "  $question [y/N]") -match '^[yYtT]'
 }
-Write-Host "`nRemoving xpp-graft from $InstallDir" -ForegroundColor Cyan
+Write-Host "`nRemoving xpp-lens from $InstallDir" -ForegroundColor Cyan
 
-$exe = Join-Path $InstallDir 'bin\xppgraft.exe'
+$exe = Join-Path $InstallDir 'bin\xpplens.exe'
 
 # Find the index before the program is removed: the configuration knows where it lives.
 $indexFolders = @()
@@ -43,17 +43,17 @@ if (Test-Path $exe) {
 }
 # The default %LOCALAPPDATA% index may be shared by other installations of this user:
 # consider it only when the configuration could not be read.
-if ($indexFolders.Count -eq 0) { $indexFolders += Join-Path $env:LOCALAPPDATA 'xpp-graft\index' }
+if ($indexFolders.Count -eq 0) { $indexFolders += Join-Path $env:LOCALAPPDATA 'xpp-lens\index' }
 $indexFolders += Join-Path $InstallDir 'index'                    # older installations
 $indexFolders = @($indexFolders | Select-Object -Unique | Where-Object { Test-Path (Join-Path $_ 'xpp.db*') })
 
 if (Test-Path $exe) { & $exe unregister } else { Say "$exe not found - skipping unregistration" }
 
 $target = [IO.Path]::GetFullPath($InstallDir).TrimEnd('\') + '\'
-Get-CimInstance Win32_Process -Filter "Name='xppgraft.exe'" |
+Get-CimInstance Win32_Process -Filter "Name='xpplens.exe'" |
     Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($target, [StringComparison]::OrdinalIgnoreCase) } |
     ForEach-Object {
-        Say "stopping xppgraft process (PID $($_.ProcessId))"
+        Say "stopping xpplens process (PID $($_.ProcessId))"
         Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
     }
 Start-Sleep -Milliseconds 500

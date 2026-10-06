@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace XppGraft;
+namespace XppLens;
 
 public sealed record AttrInfo(string Name, List<Token> Args);
 

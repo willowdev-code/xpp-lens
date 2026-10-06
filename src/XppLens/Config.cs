@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace XppGraft;
+namespace XppLens;
 
 public sealed class Config
 {
@@ -30,7 +30,7 @@ public sealed class Config
     /// <summary>Also store call references of standard code (callers inside Microsoft code; about +250 MB).</summary>
     public bool StandardCodeRefs { get; set; } = true;
 
-    /// <summary>Local log of MCP calls (size, time, empty results) read by 'xppgraft stats'. Never leaves the machine.</summary>
+    /// <summary>Local log of MCP calls (size, time, empty results) read by 'xpplens stats'. Never leaves the machine.</summary>
     public bool UsageLog { get; set; } = true;
 
     [JsonIgnore]
@@ -49,22 +49,22 @@ public sealed class Config
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
     };
 
-    /// <summary>xppgraft.json next to the executable or in a parent folder (XPPGRAFT_CONFIG wins).</summary>
+    /// <summary>xpplens.json next to the executable or in a parent folder (XPPLENS_CONFIG wins).</summary>
     public static string DefaultPath()
     {
-        var env = Environment.GetEnvironmentVariable("XPPGRAFT_CONFIG");
+        var env = Environment.GetEnvironmentVariable("XPPLENS_CONFIG");
         if (!string.IsNullOrWhiteSpace(env)) return Path.GetFullPath(env);
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         for (int i = 0; i < 5 && dir != null; i++, dir = dir.Parent)
         {
-            var p = Path.Combine(dir.FullName, "xppgraft.json");
+            var p = Path.Combine(dir.FullName, "xpplens.json");
             if (File.Exists(p)) return p;
         }
         var baseDir = new DirectoryInfo(AppContext.BaseDirectory);
         var root = baseDir.Name.Equals("bin", StringComparison.OrdinalIgnoreCase) && baseDir.Parent != null
             ? baseDir.Parent.FullName
             : baseDir.FullName;
-        return Path.Combine(root, "xppgraft.json");
+        return Path.Combine(root, "xpplens.json");
     }
 
     public static Config Load()
@@ -78,7 +78,7 @@ public sealed class Config
         // Per-user location by default: the install folder is often writable only by admins.
         if (string.IsNullOrWhiteSpace(cfg.IndexPath))
             cfg.IndexPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "xpp-graft", "index", "xpp.db");
+                "xpp-lens", "index", "xpp.db");
         return cfg;
     }
 
@@ -94,7 +94,7 @@ public sealed class Config
     {
         var sb = new System.Text.StringBuilder();
         sb.AppendLine($"config file:        {SourcePath}{(File.Exists(SourcePath ?? "") ? "" : "  (not created yet)")}");
-        sb.AppendLine($"packagesDir:        {(PackagesDir.Length == 0 ? "(not set — run: xppgraft detect)" : PackagesDir)}");
+        sb.AppendLine($"packagesDir:        {(PackagesDir.Length == 0 ? "(not set — run: xpplens detect)" : PackagesDir)}");
         sb.AppendLine($"indexPath:          {IndexPath}");
         sb.AppendLine($"labelLanguages:     {string.Join(", ", LabelLanguages)}");
         sb.AppendLine($"displayLanguage:    {DisplayLanguage}");

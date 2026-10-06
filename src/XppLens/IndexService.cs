@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 
-namespace XppGraft;
+namespace XppLens;
 
 /// <summary>
 /// Owns the query connection and keeps the index fresh:
@@ -127,7 +127,7 @@ public sealed class IndexService : IDisposable
         }
         if (!held)
         {
-            BackgroundStatus = "standard tier is being synced by another xppgraft process";
+            BackgroundStatus = "standard tier is being synced by another xpplens process";
             return total;
         }
         try
@@ -267,7 +267,7 @@ public sealed class IndexService : IDisposable
 
     public string ReadOnlyNote =>
         $"[index is read-only ({Cfg.IndexPath}) — it is NOT being updated, results may be stale. " +
-        $"Fix: run 'xppgraft config --index-path %LOCALAPPDATA%\\xpp-graft\\index\\xpp.db' and 'xppgraft build' as the user running Claude, " +
+        $"Fix: run 'xpplens config --index-path %LOCALAPPDATA%\\xpp-lens\\index\\xpp.db' and 'xpplens build' as the user running Claude, " +
         "or grant that user write access to the index folder.]";
 
     string RefreshLocked()

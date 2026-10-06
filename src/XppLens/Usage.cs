@@ -3,20 +3,20 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 
-namespace XppGraft;
+namespace XppLens;
 
 /// <summary>
-/// Local log of MCP tool calls (one JSON line per call) and its summary for 'xppgraft stats'.
+/// Local log of MCP tool calls (one JSON line per call) and its summary for 'xpplens stats'.
 /// Stays on this machine; shows which tools cost the most tokens, which are slow and which return nothing.
 /// </summary>
 public static class Usage
 {
-    public static bool Enabled { get; set; } = Environment.GetEnvironmentVariable("XPPGRAFT_USAGE") != "0";
+    public static bool Enabled { get; set; } = Environment.GetEnvironmentVariable("XPPLENS_USAGE") != "0";
 
     public static string Dir =>
-        Environment.GetEnvironmentVariable("XPPGRAFT_USAGE_DIR") is { Length: > 0 } d
+        Environment.GetEnvironmentVariable("XPPLENS_USAGE_DIR") is { Length: > 0 } d
             ? d
-            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "xpp-graft", "usage");
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "xpp-lens", "usage");
 
     static readonly object Gate = new();
 

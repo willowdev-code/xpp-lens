@@ -1,4 +1,4 @@
-namespace XppGraft;
+namespace XppLens;
 
 /// <summary>Chained receivers ("Table::find(x).name()") resolved from method signatures in the index.</summary>
 public sealed partial class Queries

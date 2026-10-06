@@ -1,7 +1,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace XppGraft;
+namespace XppLens;
 
 /// <summary>
 /// Ready-to-paste X++ skeletons with exact signatures taken from the index: Chain of Command wrappers,

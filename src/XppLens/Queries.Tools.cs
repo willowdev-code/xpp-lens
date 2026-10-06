@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Xml.Linq;
 
-namespace XppGraft;
+namespace XppLens;
 
 /// <summary>Build results, recent changes, security chains, relation paths and data entities.</summary>
 public sealed partial class Queries

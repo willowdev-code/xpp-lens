@@ -1,6 +1,6 @@
 using Microsoft.Data.Sqlite;
 
-namespace XppGraft;
+namespace XppLens;
 
 public sealed class Store : IDisposable
 {

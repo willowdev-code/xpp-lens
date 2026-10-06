@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace XppGraft;
+namespace XppLens;
 
 public enum TokKind : byte { Ident, Number, String, Punct, Macro }
 

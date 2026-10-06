@@ -1,4 +1,4 @@
-# xpp-graft — X++ (D365 F&O) code index as an MCP server
+# xpp-lens — X++ (D365 F&O) code index as an MCP server
 
 **English** | [Polski](README.pl.md)
 
@@ -7,35 +7,37 @@ Claude uses it over MCP instead of reading huge AOT XML files. Changes between v
 
 © 2026 WillowDev. Released under the [MIT License](LICENSE).
 
+An independent project, inspired by [Graft](https://github.com/trailhq/Graft) (a code graph for coding agents in many languages); xpp-lens shares no code with it and is built for X++ and the AOT. Until version 1.2.0 it was called xpp-graft — `install.ps1` takes over an existing xpp-graft installation (settings, index, Claude registration).
+
 ## Installing on a new machine
 
 The install package is not part of the repository (`dist\` is excluded by `.gitignore`). There are two ways:
 
 **A. From a release package** — nothing needs to be installed on the target machine, not even .NET.
 
-1. Download `xpp-graft-YYYYMMDD.zip` from the **Releases** tab of this repository.
+1. Download `xpp-lens-X.Y.Z.zip` from the **Releases** tab of this repository.
 2. Unzip it and run in a regular PowerShell window (not as administrator):
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\xpp-graft\install.ps1 -Languages en-US,pl
+powershell -ExecutionPolicy Bypass -File .\xpp-lens\install.ps1 -Languages en-US,pl
 ```
 
 **B. From source** — requires the .NET 9 SDK.
 
 ```powershell
-git clone https://github.com/willowdev-code/xpp-graft.git C:\Dev\xpp-graft
-cd C:\Dev\xpp-graft
-.\pack.ps1                     # creates dist\xpp-graft\ and dist\xpp-graft-YYYYMMDD.zip
-powershell -ExecutionPolicy Bypass -File .\dist\xpp-graft\install.ps1 -Languages en-US,pl
+git clone https://github.com/willowdev-code/xpp-lens.git C:\Dev\xpp-lens
+cd C:\Dev\xpp-lens
+.\pack.ps1                     # creates dist\xpp-lens\ and dist\xpp-lens-X.Y.Z.zip
+powershell -ExecutionPolicy Bypass -File .\dist\xpp-lens\install.ps1 -Languages en-US,pl
 ```
 
-The installer copies the files to `C:\Tools\xpp-graft`, detects `PackagesLocalDirectory` (from the AOS `web.config`
+The installer copies the files to `C:\Tools\xpp-lens`, detects `PackagesLocalDirectory` (from the AOS `web.config`
 or the folder layout), writes the configuration, registers the server in Claude Desktop and Claude Code, and finally
 builds the index (custom models take about a minute, the Microsoft standard 20–90 minutes once, depending on the disk).
 Close Claude before installing and start it again afterwards.
 
 New release: run `.\pack.ps1` and attach the resulting ZIP to a new release in the Releases tab (tag `vX.Y.Z`
-matching `<Version>` in `src\XppGraft\XppGraft.csproj`), with the matching section of `CHANGELOG.md` as notes.
+matching `<Version>` in `src\XppLens\XppLens.csproj`), with the matching section of `CHANGELOG.md` as notes.
 
 Useful parameters:
 
@@ -54,19 +56,19 @@ New distribution package: `pack.ps1` (add `-FrameworkDependent` if you prefer 5 
 ## Configuration after installation
 
 ```powershell
-xppgraft config                                   # show settings
-xppgraft config --add-language de                 # add a label language
-xppgraft config --add-full-model XPL              # model/package into the full index
-xppgraft config --add-standard-model ContosoIsv   # model into the standard tier
-xppgraft config --add-standard-publisher "Contoso"
-xppgraft config --packages-dir K:\AosService\PackagesLocalDirectory
-xppgraft config --standard-code false             # no call references of Microsoft code (smaller index)
-xppgraft config --usage-log false                 # do not record MCP calls for 'xppgraft stats'
-xppgraft detect [--set]                           # detect PackagesLocalDirectory
-xppgraft build                                    # apply changes
+xpplens config                                   # show settings
+xpplens config --add-language de                 # add a label language
+xpplens config --add-full-model XPL              # model/package into the full index
+xpplens config --add-standard-model ContosoIsv   # model into the standard tier
+xpplens config --add-standard-publisher "Contoso"
+xpplens config --packages-dir K:\AosService\PackagesLocalDirectory
+xpplens config --standard-code false             # no call references of Microsoft code (smaller index)
+xpplens config --usage-log false                 # do not record MCP calls for 'xpplens stats'
+xpplens detect [--set]                           # detect PackagesLocalDirectory
+xpplens build                                    # apply changes
 ```
 
-Settings live in `xppgraft.json` next to the `bin` folder and can also be edited by hand.
+Settings live in `xpplens.json` next to the `bin` folder and can also be edited by hand.
 
 ## Three index tiers
 
@@ -82,18 +84,18 @@ there (fields, types, labels) and instant `xpp_grep`. The cost is a longer build
 Index size: about 0.6 GB without standard calls, about 0.9–1 GB with them (a typical dev VM with ~190k standard files).
 
 Compiled packages rebuild themselves when their `.xref`, `.md` or resources change. Manually:
-`xppgraft build --compiled-only --force`. Folders that cannot be indexed at all are listed by `xppgraft status`
+`xpplens build --compiled-only --force`. Folders that cannot be indexed at all are listed by `xpplens status`
 in the "on disk but NOT indexed" line.
 
 ## Index permissions
 
-By default the index goes to `%LOCALAPPDATA%\xpp-graft\index\xpp.db`, where the user running Claude can write.
+By default the index goes to `%LOCALAPPDATA%\xpp-lens\index\xpp.db`, where the user running Claude can write.
 If you put the index in the installation folder and install as administrator, Claude (running without elevation)
 cannot update it — responses then show `index is read-only` and results freeze at the time of the build. Fix:
 
 ```powershell
-xppgraft config --index-path "$env:LOCALAPPDATA\xpp-graft\index\xpp.db"
-xppgraft build
+xpplens config --index-path "$env:LOCALAPPDATA\xpp-lens\index\xpp.db"
+xpplens build
 ```
 
 In read-only mode `xpp_method` and `xpp_object` still return current code (they parse the file live),
@@ -104,7 +106,7 @@ but `xpp_find`, `xpp_callers` and `xpp_refs` use the frozen index.
 - `FileSystemWatcher` on full-tier model folders — a save in Visual Studio is visible on the next query.
 - File date scan at startup and every `rescanIntervalSeconds` (default 5 min) — catches Get Latest from Team Explorer.
 - Standard: package fingerprint (descriptors + `bin\*.dll`) — rebuilt only after a platform update.
-- New version of xpp-graft with a changed code analyzer: custom models are re-parsed once at the next start
+- New version of xpp-lens with a changed code analyzer: custom models are re-parsed once at the next start
   (about a minute); the standard tier is re-indexed once in the background, package by package — an interrupted run
   continues where it stopped. `xpp_status` shows the progress.
 - Writes are serialized with a named mutex, so Claude Desktop and Claude Code can run side by side.
@@ -115,22 +117,22 @@ What each MCP tool answers, when Claude should reach for it, and the CLI equival
 
 | Tool | Answers | Use it when | CLI example |
 |---|---|---|---|
-| `xpp_find` | where objects, methods, fields are (`*`, `?`, `Object.member`, dotted extension names) | you know a name or part of it | `xppgraft find "Cust*Invoice*; SalesLine.createLine"` |
-| `xpp_object` | skeleton of an object: properties with labels, fields, indexes, relations, data sources, control/menu tree, methods with line ranges, extensions | you need the structure, not the code | `xppgraft object CustTable --type table` |
-| `xpp_method` | the source of a method with file path and line range, CoC wrappers and handlers of it | you need the code; for long methods with `match`/`lines` | `xppgraft method SalesTable validateWrite --match "checkFailed" --context 2` |
-| `xpp_callers` | who calls a method — custom code first, then compiled packages and Microsoft code; chained calls (`Table::find().m()`) included | impact of a change, "where is this used" | `xppgraft callers CustTable creditMax` |
-| `xpp_callees` | what a method uses: calls (chained receivers typed), new, fields, enums, intrinsics, labels | understanding a method without reading it | `xppgraft callees SalesFormLetter run` |
-| `xpp_refs` | every use of a class, table, field, EDT, enum, menu item or label | renaming, removing, finding usages of a field | `xppgraft refs CustTable --member CreditMax` |
-| `xpp_extensions` | CoC classes (with wrapped methods), table/form extensions, event handlers, derived classes | "what already changes this object" | `xppgraft ext SalesTable` |
-| `xpp_scaffold` | ready X++: CoC wrapper, table/form/data source/control event handler, delegate subscriber, pre/post handler — exact signature, naming pattern of your models | before writing an extension | `xppgraft scaffold coc SalesTable validateWrite --type table` |
-| `xpp_build_errors` | errors/warnings of the last Visual Studio build, mapped to the XML file line | after a build, to fix errors without pasting logs | `xppgraft build-errors --severity warning` |
-| `xpp_security` | menu item / form → privileges (granted access) → duties → roles, and the reverse for privileges, duties, roles | access questions, new menu items | `xppgraft security CustTable --type display` |
-| `xpp_join` | shortest relation path between two tables as a ready `select … join … where` | writing a query across tables | `xppgraft join CustInvoiceTrans CustTable` |
-| `xpp_entity` | data entity: public names, staging table, data source tree with joins, field mapping, keys; or the entities that use a table | data management / OData work | `xppgraft entity CustCustomerV3Entity` |
-| `xpp_changed` | objects changed on disk since a time, per model | after Get Latest, reviewing own work | `xppgraft changed --since 3d` |
-| `xpp_grep` | regex over method bodies (custom models; standard with a model filter) | text patterns the other tools cannot express | `xppgraft grep "ttsbegin" --model Contoso*` |
-| `xpp_label` | label id → texts in all languages, or text → existing label ids | reusing labels | `xppgraft label "Credit limit"` |
-| `xpp_status` | index state, tiers, background work | checking freshness | `xppgraft status` |
+| `xpp_find` | where objects, methods, fields are (`*`, `?`, `Object.member`, dotted extension names) | you know a name or part of it | `xpplens find "Cust*Invoice*; SalesLine.createLine"` |
+| `xpp_object` | skeleton of an object: properties with labels, fields, indexes, relations, data sources, control/menu tree, methods with line ranges, extensions | you need the structure, not the code | `xpplens object CustTable --type table` |
+| `xpp_method` | the source of a method with file path and line range, CoC wrappers and handlers of it | you need the code; for long methods with `match`/`lines` | `xpplens method SalesTable validateWrite --match "checkFailed" --context 2` |
+| `xpp_callers` | who calls a method — custom code first, then compiled packages and Microsoft code; chained calls (`Table::find().m()`) included | impact of a change, "where is this used" | `xpplens callers CustTable creditMax` |
+| `xpp_callees` | what a method uses: calls (chained receivers typed), new, fields, enums, intrinsics, labels | understanding a method without reading it | `xpplens callees SalesFormLetter run` |
+| `xpp_refs` | every use of a class, table, field, EDT, enum, menu item or label | renaming, removing, finding usages of a field | `xpplens refs CustTable --member CreditMax` |
+| `xpp_extensions` | CoC classes (with wrapped methods), table/form extensions, event handlers, derived classes | "what already changes this object" | `xpplens ext SalesTable` |
+| `xpp_scaffold` | ready X++: CoC wrapper, table/form/data source/control event handler, delegate subscriber, pre/post handler — exact signature, naming pattern of your models | before writing an extension | `xpplens scaffold coc SalesTable validateWrite --type table` |
+| `xpp_build_errors` | errors/warnings of the last Visual Studio build, mapped to the XML file line | after a build, to fix errors without pasting logs | `xpplens build-errors --severity warning` |
+| `xpp_security` | menu item / form → privileges (granted access) → duties → roles, and the reverse for privileges, duties, roles | access questions, new menu items | `xpplens security CustTable --type display` |
+| `xpp_join` | shortest relation path between two tables as a ready `select … join … where` | writing a query across tables | `xpplens join CustInvoiceTrans CustTable` |
+| `xpp_entity` | data entity: public names, staging table, data source tree with joins, field mapping, keys; or the entities that use a table | data management / OData work | `xpplens entity CustCustomerV3Entity` |
+| `xpp_changed` | objects changed on disk since a time, per model | after Get Latest, reviewing own work | `xpplens changed --since 3d` |
+| `xpp_grep` | regex over method bodies (custom models; standard with a model filter) | text patterns the other tools cannot express | `xpplens grep "ttsbegin" --model Contoso*` |
+| `xpp_label` | label id → texts in all languages, or text → existing label ids | reusing labels | `xpplens label "Credit limit"` |
+| `xpp_status` | index state, tiers, background work | checking freshness | `xpplens status` |
 
 ### Several lookups in one call, and method fragments
 
@@ -146,7 +148,7 @@ Large trees (more than 60 elements) are collapsed to two levels with a child cou
 
 | Parameter | Effect | Example |
 |---|---|---|
-| `filter` | wildcard on name or path; prints **full paths** | `xppgraft object CustTable --type form --filter *PersonalTitle*` |
+| `filter` | wildcard on name or path; prints **full paths** | `xpplens object CustTable --type form --filter *PersonalTitle*` |
 | `parent` | only the subtree of one element (name or path) | `--parent TabGeneral` |
 | `depth` | number of levels (below `parent`, if given) | `--parent UpperGroup --depth 1` |
 
@@ -156,38 +158,38 @@ and `menuitem=<MenuItemName>`.
 
 ## Usage statistics
 
-Every MCP call is appended to `%LOCALAPPDATA%\xpp-graft\usage\usage-YYYYMM.jsonl` (tool, arguments, answer size,
-time, empty or not). The log never leaves the machine. `xppgraft stats` summarizes it:
+Every MCP call is appended to `%LOCALAPPDATA%\xpp-lens\usage\usage-YYYYMM.jsonl` (tool, arguments, answer size,
+time, empty or not). The log never leaves the machine. `xpplens stats` summarizes it:
 
 ```powershell
-xppgraft stats --days 7 --top 10
+xpplens stats --days 7 --top 10
 ```
 
 It shows per tool the number of calls, average / p95 / max answer size in tokens (characters / 4), time, the share of
 empty answers, plus the largest and slowest calls and the latest empty answers — the places where the tool did not
-help and Claude probably fell back to reading files. Switch off with `xppgraft config --usage-log false`.
+help and Claude probably fell back to reading files. Switch off with `xpplens config --usage-log false`.
 
 ## CLI
 
 ```
-xppgraft find|object|method|callers|callees|refs|ext|scaffold|build-errors|security|join|entity|changed|grep|label …
-xppgraft build [--full-only] [--std-only] [--compiled-only] [--force]
-xppgraft status | stats | detect | config | register | unregister | mcp | version
+xpplens find|object|method|callers|callees|refs|ext|scaffold|build-errors|security|join|entity|changed|grep|label …
+xpplens build [--full-only] [--std-only] [--compiled-only] [--force]
+xpplens status | stats | detect | config | register | unregister | mcp | version
 ```
 
-`xppgraft help` lists every option. Environment variables: `XPPGRAFT_CONFIG` (another configuration),
-`XPPGRAFT_VERBOSE=1` (SQL timings on stderr), `XPPGRAFT_TIMING=1` (total time of a CLI query).
+`xpplens help` lists every option. Environment variables: `XPPLENS_CONFIG` (another configuration),
+`XPPLENS_VERBOSE=1` (SQL timings on stderr), `XPPLENS_TIMING=1` (total time of a CLI query).
 
 ## Development
 
-The source code lives **separately from the installation**, by default in `C:\Dev\xpp-graft`:
+The source code lives **separately from the installation**, by default in `C:\Dev\xpp-lens`:
 
 ```
-C:\Dev\xpp-graft\
-  xpp-graft.sln             solution for Visual Studio 2022
-  src\XppGraft\*.cs         source
-  src\XppGraft\Properties\launchSettings.json   launch profiles (F5)
-  tests\XppGraft.Tests\     xUnit tests + sample AOT XML (Fixtures)
+C:\Dev\xpp-lens\
+  xpp-lens.sln             solution for Visual Studio 2022
+  src\XppLens\*.cs         source
+  src\XppLens\Properties\launchSettings.json   launch profiles (F5)
+  tests\XppLens.Tests\     xUnit tests + sample AOT XML (Fixtures)
   build.ps1                 compile; -Deploy replaces the binaries in the installation
   pack.ps1                  ZIP package for installing elsewhere
   install.ps1 uninstall.ps1 README.md README.pl.md CHANGELOG.md LICENSE
@@ -196,22 +198,22 @@ C:\Dev\xpp-graft\
 
 ### Visual Studio
 
-Open `C:\Dev\xpp-graft\xpp-graft.sln` in **Visual Studio 2022** (17.12 or newer — VS 2019 does not support .NET 9).
+Open `C:\Dev\xpp-lens\xpp-lens.sln` in **Visual Studio 2022** (17.12 or newer — VS 2019 does not support .NET 9).
 Build with Ctrl+Shift+B. Next to the green arrow on the toolbar pick a profile from `launchSettings.json`
 (`status`, `stats (MCP usage)`, `find (batch)`, `object (form controls)`, `method (fragment)`, `callers (incl. standard)`,
 `scaffold coc`, `security`, `join`, `entity`, `changed (3 days)`, `build-errors`, `build compiled packages`,
 `verbose SQL (status)`) and press F5 — the program starts under the debugger against the real configuration and index
-(`XPPGRAFT_CONFIG` is set in the profile). Your own profile: Debug → *XppGraft Debug Properties* → new profile,
+(`XPPLENS_CONFIG` is set in the profile). Your own profile: Debug → *XppLens Debug Properties* → new profile,
 enter a CLI command in "Command line arguments".
 
 The MCP server cannot be debugged with F5 (it talks to Claude over stdin/stdout). To watch it at work,
 deploy a Debug build (`.\build.ps1 -Deploy -Configuration Debug`), restart Claude and in VS use
-Debug → *Attach to Process* → `xppgraft.exe`.
+Debug → *Attach to Process* → `xpplens.exe`.
 
 ### Tests
 
 The tests never touch your `PackagesLocalDirectory` or your index. They copy a small sample package set from
-`tests\XppGraft.Tests\Fixtures\PackagesLocalDirectory` (a "Microsoft" package `StdBase` and a custom package
+`tests\XppLens.Tests\Fixtures\PackagesLocalDirectory` (a "Microsoft" package `StdBase` and a custom package
 `ContosoCore`, neutral names only) to a temporary folder, build an index there and check what the tools answer.
 
 **In Visual Studio:** Test → *Test Explorer* (Ctrl+E, T) → *Run All Tests* (Ctrl+R, A). The first run builds the
@@ -220,7 +222,7 @@ solution; a test can be debugged with right click → *Debug*.
 **From the command line:**
 
 ```powershell
-cd C:\Dev\xpp-graft
+cd C:\Dev\xpp-lens
 dotnet test                                              # all tests (about 10 s)
 dotnet test --filter "FullyQualifiedName~QueryTests"     # only the end-to-end tool tests
 dotnet test --filter "Name~Scaffold"                     # tests whose name contains "Scaffold"
@@ -255,7 +257,7 @@ Work loop:
 
 ```powershell
 .\build.ps1                 # compile into .\build
-.\build\xppgraft.exe find CustTable   # test from the command line, no Claude restart needed
+.\build\xpplens.exe find CustTable   # test from the command line, no Claude restart needed
 dotnet test                 # run the tests
 .\build.ps1 -Deploy         # replace the installed binaries (stops running processes)
 .\build.ps1 -Test -Deploy   # the same, but only when all tests pass
@@ -263,7 +265,7 @@ dotnet test                 # run the tests
 
 After `-Deploy` restart Claude Desktop and Claude Code sessions — MCP loads the binary at startup.
 
-Changing `Store.SchemaVersion` drops the index and requires `xppgraft build`.
+Changing `Store.SchemaVersion` drops the index and requires `xpplens build`.
 
 Documentation is kept in two languages: any change to `README.md` must be mirrored in `README.pl.md` in the same commit.
 

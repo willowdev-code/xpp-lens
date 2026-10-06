@@ -2,7 +2,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Data.Sqlite;
 
-namespace XppGraft;
+namespace XppLens;
 
 public sealed partial class Queries(IndexService svc)
 {
@@ -750,7 +750,7 @@ public sealed partial class Queries(IndexService svc)
             foreach (var l in sample) sb.AppendLine(l);
         }
         if (standard && !svc.Cfg.StandardCodeRefs)
-            sb.AppendLine("(standard code calls are not indexed: xppgraft config --standard-code true, then xppgraft build --std-only)");
+            sb.AppendLine("(standard code calls are not indexed: xpplens config --standard-code true, then xpplens build --std-only)");
         return Finish(sb);
     });
 
@@ -995,7 +995,7 @@ public sealed partial class Queries(IndexService svc)
                     Type: r.GetString(5), Obj: r.GetString(6))).ToList();
             if (files.Count > 60000)
                 return $"scope too large ({files.Count} XML files to read); narrow with model/object/type, or index that package fully " +
-                       "(xppgraft config --add-full-model <package> + xppgraft build), which makes grep and the call graph instant there.";
+                       "(xpplens config --add-full-model <package> + xpplens build), which makes grep and the call graph instant there.";
 
             // Scan the XML files in parallel, then resolve line -> method for the few files that matched.
             files = files.Where(f => !BinaryPackage.IsPseudoPath(f.Path)).ToList();

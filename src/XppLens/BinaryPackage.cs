@@ -5,7 +5,7 @@ using System.Reflection.PortableExecutable;
 using System.Text;
 using System.Xml.Linq;
 
-namespace XppGraft;
+namespace XppLens;
 
 /// <summary>
 /// Compiled-only packages (deployed without Ax* XML) still leave enough behind to be searchable:

@@ -1,12 +1,12 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net9.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <AssemblyName>xppgraft</AssemblyName>
-    <RootNamespace>XppGraft</RootNamespace>
+    <AssemblyName>xpplens</AssemblyName>
+    <RootNamespace>XppLens</RootNamespace>
     <InvariantGlobalization>true</InvariantGlobalization>
     <ServerGarbageCollection>false</ServerGarbageCollection>
     <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
@@ -16,15 +16,15 @@
   <PropertyGroup>
     <Company>WillowDev</Company>
     <Authors>WillowDev</Authors>
-    <Product>xpp-graft</Product>
-    <AssemblyTitle>xpp-graft — X++ code index for MCP</AssemblyTitle>
+    <Product>xpp-lens</Product>
+    <AssemblyTitle>xpp-lens â€” X++ code index for MCP</AssemblyTitle>
     <Description>X++ (Dynamics 365 F&amp;O) code index served to AI assistants over MCP</Description>
-    <Copyright>Copyright © 2026 WillowDev</Copyright>
-    <Version>1.2.0</Version>
+    <Copyright>Copyright Â© 2026 WillowDev</Copyright>
+    <Version>1.2.1</Version>
   </PropertyGroup>
 
   <ItemGroup>
-    <InternalsVisibleTo Include="XppGraft.Tests" />
+    <InternalsVisibleTo Include="XppLens.Tests" />
   </ItemGroup>
 
   <ItemGroup>

@@ -6,7 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
-    <RootNamespace>XppGraft.Tests</RootNamespace>
+    <RootNamespace>XppLens.Tests</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
@@ -16,7 +16,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\XppGraft\XppGraft.csproj" />
+    <ProjectReference Include="..\..\src\XppLens\XppLens.csproj" />
   </ItemGroup>
 
   <ItemGroup>
