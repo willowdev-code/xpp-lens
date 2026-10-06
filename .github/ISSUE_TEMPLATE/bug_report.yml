@@ -1,0 +1,55 @@
+name: Bug report
+description: Something does not work as described.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting!
+
+        **Please do not paste code, object names, labels or any other data from your own or your customers'
+        Dynamics 365 projects.** Reproduce the problem with standard objects (e.g. `CustTable`, `SalesTable`) or
+        neutral names (e.g. `ContosoHelper`), or describe it in general terms.
+        Security problems: use **Security → Report a vulnerability** instead of an issue.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `xpplens version`.
+      placeholder: xpp-lens 1.2.1
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: The tool or command you used, with its parameters, and what you got.
+      placeholder: |
+        xpp_callers objectName=CustTable method=creditMax
+        -> returned nothing, although ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: status
+    attributes:
+      label: Index status (optional)
+      description: Output of `xpplens status`. Remove model and package names that belong to a customer.
+      render: text
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Windows version, D365 platform / application version, Claude Desktop or Claude Code.
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Confidential data
+      options:
+        - label: This report contains no code, object names or data from customer projects.
+          required: true

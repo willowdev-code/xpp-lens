@@ -1,5 +1,7 @@
 # xpp-lens — indeks kodu X++ (D365 F&O) jako serwer MCP
 
+[![CI](https://github.com/willowdev-code/xpp-lens/actions/workflows/ci.yml/badge.svg)](https://github.com/willowdev-code/xpp-lens/actions/workflows/ci.yml)
+
 [English](README.md) | **Polski**
 
 Czyta `PackagesLocalDirectory` **tylko do odczytu** i buduje własny indeks (SQLite) poza repozytorium AOS.
@@ -269,6 +271,10 @@ Po `-Deploy` zrestartuj Claude Desktop i sesje Claude Code — MCP ładuje binar
 Zmiana `Store.SchemaVersion` kasuje indeks i wymusza `xpplens build`.
 
 Dokumentacja jest w dwóch językach: każdą zmianę w `README.pl.md` trzeba odzwierciedlić w `README.md` w tym samym commicie.
+
+## Zgłaszanie problemów
+
+Błędy i pomysły: załóż issue (formularz pyta o wersję i wykonane polecenie). Problemy z bezpieczeństwem: **Security → Report a vulnerability**, zob. [SECURITY.md](SECURITY.md). Nigdy nie wklejaj kodu, nazw obiektów ani danych z własnych projektów ani projektów klientów — odtwórz problem na obiektach standardowych albo neutralnych nazwach.
 
 ## Ograniczenia
 

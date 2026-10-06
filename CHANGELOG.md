@@ -3,6 +3,12 @@
 All notable changes to xpp-lens (called xpp-graft up to 1.2.0). Versions follow `<Version>` in
 `src/XppLens/XppLens.csproj`; release tags are `vX.Y.Z`.
 
+## Unreleased
+
+### Added
+- Continuous integration: GitHub Actions builds the solution and runs the tests on Windows for every push and pull request.
+- `SECURITY.md` and issue forms for bug reports and feature requests, which ask not to share customer code or data.
+
 ## 1.2.1 — 2026-10-06
 
 ### Changed

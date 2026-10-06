@@ -1,5 +1,7 @@
 # xpp-lens — X++ (D365 F&O) code index as an MCP server
 
+[![CI](https://github.com/willowdev-code/xpp-lens/actions/workflows/ci.yml/badge.svg)](https://github.com/willowdev-code/xpp-lens/actions/workflows/ci.yml)
+
 **English** | [Polski](README.pl.md)
 
 Reads `PackagesLocalDirectory` **read-only** and builds its own index (SQLite) outside the AOS repository.
@@ -268,6 +270,10 @@ After `-Deploy` restart Claude Desktop and Claude Code sessions — MCP loads th
 Changing `Store.SchemaVersion` drops the index and requires `xpplens build`.
 
 Documentation is kept in two languages: any change to `README.md` must be mirrored in `README.pl.md` in the same commit.
+
+## Reporting problems
+
+Bugs and ideas: open an issue (the form asks for the version and what you ran). Security problems: **Security → Report a vulnerability**, see [SECURITY.md](SECURITY.md). Please never paste code, object names or data from your own or your customers' projects — reproduce the problem with standard objects or neutral names.
 
 ## Limitations
 

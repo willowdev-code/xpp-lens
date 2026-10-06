@@ -1,0 +1,27 @@
+name: Feature request
+description: An idea for a new tool or a better answer from an existing one.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please describe the use case with standard objects or neutral names — no code or data from customer projects.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What you are trying to do
+      description: The question you want Claude to answer, or the task that still needs reading AOT XML by hand.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would help
+      description: A new tool, a parameter, a different output — whatever you have in mind.
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Confidential data
+      options:
+        - label: This request contains no code, object names or data from customer projects.
+          required: true
