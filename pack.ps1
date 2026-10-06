@@ -29,7 +29,9 @@ New-Item -ItemType Directory -Force -Path $stage | Out-Null
 
 $publishArgs = @(
     'publish', $proj, '-c', 'Release', '-r', 'win-x64',
-    '-o', (Join-Path $stage 'bin'), '--nologo'
+    '-o', (Join-Path $stage 'bin'), '--nologo',
+    # No debug information: a release build would otherwise carry the local path of its .pdb file.
+    '-p:DebugType=None', '-p:DebugSymbols=false'
 )
 if ($FrameworkDependent) {
     $publishArgs += @('--self-contained', 'false')
