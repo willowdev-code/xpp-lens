@@ -310,12 +310,56 @@ public static partial class CodeAnalyzer
         return vars;
     }
 
+    /// <summary>0-based source lines that hold a variable declaration (used to keep them in method fragments).</summary>
+    public static HashSet<int> DeclarationLines(List<Token> toks, int from)
+    {
+        var lines = new HashSet<int>();
+        for (int i = from; i < toks.Count; i++)
+        {
+            if (IsId(toks[i], "var") && i + 2 < toks.Count && toks[i + 1].Kind == TokKind.Ident && Is(toks[i + 2], "="))
+            {
+                lines.Add(toks[i].Line);
+                continue;
+            }
+            if (!TryDeclaration(toks, i, out _, out var varIdx)) continue;
+            lines.Add(toks[i].Line);
+            i = varIdx;
+        }
+        return lines;
+    }
+
+    /// <summary>
+    /// Chained receivers ("Table::find(x).name()", "a.b().c()") cannot be typed while parsing: the return type
+    /// lives in another object. They are recorded with target = null and via = "ret:" + chain, where the chain is
+    /// "Type>method>method…" (the type of the first receiver, then the calls applied to it). Queries resolve the
+    /// chain from method signatures in the index.
+    /// </summary>
+    public const string ChainPrefix = "ret:";
+
+    public static bool IsChain(string? type) => type != null && type.Contains('>');
+
+    static int[] MatchParens(List<Token> toks, int from)
+    {
+        var close = new int[toks.Count];
+        Array.Fill(close, -1);
+        var open = new Stack<int>();
+        for (int i = from; i < toks.Count; i++)
+        {
+            if (Is(toks[i], "(")) open.Push(i);
+            else if (Is(toks[i], ")") && open.Count > 0) close[open.Pop()] = i;
+        }
+        return close;
+    }
+
     /// <summary>Extracts references from a code block (full tier).</summary>
     public static void BodyRefs(CodeContext ctx, List<Token> toks, int from, int baseLine, List<CodeRef> refs,
         Dictionary<string, string>? locals)
     {
         locals ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         int n = toks.Count;
+        var close = MatchParens(toks, from);
+        // ")" token index → type expression of the call it closes (concrete "Type" or chain "Type>m").
+        var resultAt = new Dictionary<int, string>();
 
         string? Resolve(string name)
         {
@@ -331,6 +375,24 @@ public static partial class CodeAnalyzer
         string Next(int i) => i + 1 < n && toks[i + 1].Kind == TokKind.Punct ? toks[i + 1].Text : "";
         string Prev(int i) => i > 0 && toks[i - 1].Kind == TokKind.Punct ? toks[i - 1].Text : "";
 
+        void Result(int openParen, string? type)
+        {
+            if (type == null || type.Contains('.') || openParen < 0 || openParen >= n || close[openParen] < 0) return;
+            resultAt[close[openParen]] = type;
+        }
+
+        static string? Then(string? recv, string member) => recv == null || recv.Contains('.') ? null : $"{recv}>{member}";
+
+        void Access(int line, string? recv, string member, bool call)
+        {
+            if (recv == null)
+            {
+                if (call) refs.Add(new CodeRef(line, "call", null, member, null));
+            }
+            else if (IsChain(recv)) refs.Add(new CodeRef(line, call ? "call" : "member", null, member, ChainPrefix + recv));
+            else refs.Add(new CodeRef(line, call ? "call" : "member", recv, member, null));
+        }
+
         for (int i = from; i < n; i++)
         {
             var t = toks[i];
@@ -342,7 +404,34 @@ public static partial class CodeAnalyzer
                     refs.Add(new CodeRef(line, "label", t.Text, null, null));
                 continue;
             }
+
+            // "<call>(…).member" — the receiver is whatever that call returned.
+            if (Is(t, ")") && Next(i) == "." && i + 2 < n && toks[i + 2].Kind == TokKind.Ident)
+            {
+                var member = toks[i + 2].Text;
+                bool call = Next(i + 2) == "(";
+                var recv = resultAt.GetValueOrDefault(i);
+                Access(baseLine + toks[i + 2].Line, recv, member, call);
+                if (call) Result(i + 3, Then(recv, member));
+                i += 2;
+                continue;
+            }
             if (t.Kind != TokKind.Ident) continue;
+
+            // var x = new T(…) / A::m(…) / y.m(…): remember what x holds.
+            if (IsId(t, "var") && i + 3 < n && toks[i + 1].Kind == TokKind.Ident && Is(toks[i + 2], "="))
+            {
+                var name = toks[i + 1].Text;
+                int r = i + 3;
+                if (IsId(toks[r], "new") && r + 2 < n && toks[r + 1].Kind == TokKind.Ident && Is(toks[r + 2], "("))
+                    locals[name] = toks[r + 1].Text;
+                else if (toks[r].Kind == TokKind.Ident && r + 3 < n && Is(toks[r + 1], "::") && toks[r + 2].Kind == TokKind.Ident && Is(toks[r + 3], "("))
+                    locals[name] = $"{toks[r].Text}>{toks[r + 2].Text}";
+                else if (toks[r].Kind == TokKind.Ident && r + 3 < n && Is(toks[r + 1], ".") && toks[r + 2].Kind == TokKind.Ident && Is(toks[r + 3], "(")
+                         && Then(Resolve(toks[r].Text), toks[r + 2].Text) is { } chain)
+                    locals[name] = chain;
+                continue;
+            }
 
             if (Next(i) == "(" && Intrinsics.Contains(t.Text))
             {
@@ -358,6 +447,7 @@ public static partial class CodeAnalyzer
             {
                 bool call = Next(i + 2) == "(";
                 refs.Add(new CodeRef(line, call ? "call" : "static", t.Text, toks[i + 2].Text, call ? "::" : null));
+                if (call) Result(i + 3, Then(t.Text, toks[i + 2].Text));
                 i += 2;
                 continue;
             }
@@ -370,6 +460,7 @@ public static partial class CodeAnalyzer
                 {
                     var name = string.Join("", toks.Skip(i + 1).Take(j - i).Select(x => x.Text));
                     refs.Add(new CodeRef(line, "new", name, null, null));
+                    Result(j + 1, name);
                 }
                 i = j;
                 continue;
@@ -379,14 +470,22 @@ public static partial class CodeAnalyzer
             {
                 var target = ctx.ExtensionTarget ?? ctx.Extends;
                 if (target != null && ctx.MethodName != null)
+                {
                     refs.Add(new CodeRef(line, "call", target, ctx.MethodName, "super"));
+                    Result(i + 1, Then(target, ctx.MethodName));
+                }
                 continue;
             }
 
             if (IsId(t, "next") && i + 1 < n && toks[i + 1].Kind == TokKind.Ident && Next(i + 1) == "(")
             {
                 if (ctx.ExtensionTarget != null)
+                {
                     refs.Add(new CodeRef(line, "coc", ctx.ExtensionTarget, toks[i + 1].Text, "next"));
+                    // Form data source / control extensions wrap element methods, not the form's own.
+                    if (string.Equals(ctx.ThisType, ctx.ExtensionTarget, StringComparison.OrdinalIgnoreCase))
+                        Result(i + 2, Then(ctx.ExtensionTarget, toks[i + 1].Text));
+                }
                 i++;
                 continue;
             }
@@ -403,10 +502,8 @@ public static partial class CodeAnalyzer
                 var recv = Resolve(t.Text);
                 var member = toks[i + 2].Text;
                 bool call = Next(i + 2) == "(";
-                if (recv != null)
-                    refs.Add(new CodeRef(line, call ? "call" : "member", recv, member, null));
-                else if (call)
-                    refs.Add(new CodeRef(line, "call", null, member, null));
+                Access(line, recv, member, call);
+                if (call) Result(i + 3, Then(recv, member));
                 i += 2;
                 continue;
             }

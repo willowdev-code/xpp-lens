@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AxForm xmlns:i="http://www.w3.org/2001/XMLSchema-instance" xmlns="Microsoft.Dynamics.AX.Metadata.V6">
+	<Name>DemoCustomer</Name>
+	<SourceCode>
+		<Methods xmlns="">
+			<Method>
+				<Name>init</Name>
+				<Source><![CDATA[
+    public void init()
+    {
+        super();
+    }
+
+]]></Source>
+			</Method>
+		</Methods>
+		<DataSources xmlns="">
+			<DataSource>
+				<Name>DemoCustomer</Name>
+				<Methods>
+					<Method>
+						<Name>validateWrite</Name>
+						<Source><![CDATA[
+        public boolean validateWrite()
+        {
+            boolean ret = super();
+
+            return ret;
+        }
+
+]]></Source>
+					</Method>
+				</Methods>
+			</DataSource>
+		</DataSources>
+	</SourceCode>
+	<DataSources>
+		<AxFormDataSource xmlns="">
+			<Name>DemoCustomer</Name>
+			<Table>DemoCustomer</Table>
+		</AxFormDataSource>
+	</DataSources>
+	<Design>
+		<Caption xmlns="">@DemoLabels:Customer</Caption>
+		<Controls xmlns="">
+			<AxFormControl xmlns="" i:type="AxFormGridControl">
+				<Name>Grid</Name>
+				<Type>Grid</Type>
+				<Controls>
+					<AxFormControl xmlns="" i:type="AxFormStringControl">
+						<Name>Grid_AccountNum</Name>
+						<Type>String</Type>
+						<DataField>AccountNum</DataField>
+						<DataSource>DemoCustomer</DataSource>
+					</AxFormControl>
+				</Controls>
+			</AxFormControl>
+		</Controls>
+	</Design>
+</AxForm>

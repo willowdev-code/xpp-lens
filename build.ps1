@@ -12,11 +12,14 @@
     .\build.ps1 -Deploy               # compile and replace C:\Tools\xpp-graft\bin
 .EXAMPLE
     .\build.ps1 -Deploy -InstallDir "$env:LOCALAPPDATA\Programs\xpp-graft"
+.EXAMPLE
+    .\build.ps1 -Test -Deploy         # run the tests first; deploy only when they pass
 #>
 [CmdletBinding()]
 param(
     [string] $InstallDir = 'C:\Tools\xpp-graft',
     [switch] $Deploy,
+    [switch] $Test,
     [ValidateSet('Debug', 'Release')]
     [string] $Configuration = 'Release'
 )
@@ -25,6 +28,11 @@ $ErrorActionPreference = 'Stop'
 $proj = Join-Path $PSScriptRoot 'src\XppGraft\XppGraft.csproj'
 $out = Join-Path $PSScriptRoot 'build'
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
+
+if ($Test) {
+    & dotnet test (Join-Path $PSScriptRoot 'tests\XppGraft.Tests\XppGraft.Tests.csproj') --nologo -v q
+    if ($LASTEXITCODE -ne 0) { throw 'tests failed - nothing was built or deployed' }
+}
 
 if ($Deploy) {
     $target = [IO.Path]::GetFullPath($InstallDir).TrimEnd('\') + '\'

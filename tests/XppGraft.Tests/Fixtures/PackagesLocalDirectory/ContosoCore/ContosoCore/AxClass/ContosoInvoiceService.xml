@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AxClass xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
+	<Name>ContosoInvoiceService</Name>
+	<SourceCode>
+		<Declaration><![CDATA[
+public class ContosoInvoiceService
+{
+}
+]]></Declaration>
+		<Methods>
+			<Method>
+				<Name>run</Name>
+				<Source><![CDATA[
+    public void run()
+    {
+        DemoCustomer customer = DemoCustomer::find('C0001');
+        real limit;
+        str customerName;
+        var helper = new ContosoHelper();
+
+        limit = customer.creditMax();
+        customerName = DemoCustomer::find('C0002').name();
+        limit += helper.calc_Total();
+        limit += new ContosoHelper().customer().creditMax();
+
+        if (limit > 1000)
+        {
+            info(strFmt("@DemoLabels:CreditLimit", limit));
+        }
+
+        ttsbegin;
+        customer.selectForUpdate(true);
+        customer.update();
+        ttscommit;
+    }
+
+]]></Source>
+			</Method>
+		</Methods>
+	</SourceCode>
+</AxClass>

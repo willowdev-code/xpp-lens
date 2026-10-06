@@ -3,7 +3,7 @@
 [English](README.md) | **Polski**
 
 Czyta `PackagesLocalDirectory` **tylko do odczytu** i buduje własny indeks (SQLite) poza repozytorium AOS.
-Claude korzysta z niego przez MCP zamiast czytać wielkie pliki XML z AOT.
+Claude korzysta z niego przez MCP zamiast czytać wielkie pliki XML z AOT. Zmiany między wersjami: [CHANGELOG.md](CHANGELOG.md).
 
 © 2026 WillowDev. Udostępnione na [licencji MIT](LICENSE).
 
@@ -31,11 +31,11 @@ powershell -ExecutionPolicy Bypass -File .\dist\xpp-graft\install.ps1 -Languages
 
 Instalator kopiuje pliki do `C:\Tools\xpp-graft`, wykrywa `PackagesLocalDirectory` (z `web.config` AOS-a albo
 układu katalogów), zapisuje konfigurację, rejestruje serwer w Claude Desktop i Claude Code, a na końcu buduje indeks
-(modele własne ok. minuty, standard Microsoftu jednorazowo 20–40 minut). Przed instalacją zamknij Claude'a.
-Po instalacji uruchom go ponownie.
+(modele własne ok. minuty, standard Microsoftu jednorazowo 20–90 minut, zależnie od dysku). Przed instalacją zamknij
+Claude'a. Po instalacji uruchom go ponownie.
 
 Nowe wydanie: `.\pack.ps1`, a powstały ZIP dołącz do nowego wydania w zakładce Releases (tag `vX.Y.Z` zgodny
-z `<Version>` w `src\XppGraft\XppGraft.csproj`).
+z `<Version>` w `src\XppGraft\XppGraft.csproj`), jako opis daj odpowiednią sekcję `CHANGELOG.md`.
 
 Przydatne parametry:
 
@@ -60,6 +60,8 @@ xppgraft config --add-full-model XPL              # model/pakiet do pełnego ind
 xppgraft config --add-standard-model ContosoIsv   # model do poziomu standardowego
 xppgraft config --add-standard-publisher "Contoso"
 xppgraft config --packages-dir K:\AosService\PackagesLocalDirectory
+xppgraft config --standard-code false             # bez wywołań z kodu Microsoftu (mniejszy indeks)
+xppgraft config --usage-log false                 # nie zapisuj wywołań MCP dla 'xppgraft stats'
 xppgraft detect [--set]                           # wykryj PackagesLocalDirectory
 xppgraft build                                    # zastosuj zmiany
 ```
@@ -70,12 +72,14 @@ Ustawienia siedzą w `xppgraft.json` obok katalogu `bin` — można je też edyt
 
 | Poziom | Modele | Co zawiera |
 |---|---|---|
-| pełny | wszystkie niemicrosoftowe (wykrywane po `Publisher` w deskryptorze) + te z `extraFullModels` | obiekty, składowe, sygnatury i kod metod, referencje w kodzie (wywołania, typy, pola, intrinsics, etykiety), referencje z metadanych |
-| standardowy | modele Microsoftu | obiekty, pola/indeksy/relacje, sygnatury metod z zakresami linii, `extends`, CoC i event handlery — bez referencji z ciał metod |
+| pełny | wszystkie niemicrosoftowe (wykrywane po `Publisher` w deskryptorze) + te z `extraFullModels` | obiekty, składowe, sygnatury i kod metod, referencje w kodzie (wywołania, także łańcuchowe, typy, pola, intrinsics, etykiety), referencje z metadanych |
+| standardowy | modele Microsoftu | obiekty, pola/indeksy/relacje, sygnatury metod z zakresami linii, `extends`, CoC i event handlery oraz **wywołania** z ciał metod (wywołania, `new`, intrinsics — bez odczytów pól, typów i etykiet; wyłączasz przez `--standard-code false`) |
 | skompilowany | pakiety wdrożone bez XML (np. lokalizacje krajowe albo moduły ISV dostarczone tylko w postaci skompilowanej) | nazwy obiektów z `bin\*.md`, metody, pola, grupy pól, relacje i **odwołania z kompilatora** z `.xref`, CoC z `ChainOfCommand.xml`, dziedziczenie z `ClassExtends.runtime`, etykiety z `Resources\<język>\*.resources.dll` — bez kodu źródłowego |
 
-Pakiet standardowy można awansować do pełnego (`--add-full-model ApplicationSuite`), jeśli potrzebny jest tam
-graf wywołań i natychmiastowy `xpp_grep`. Kosztem jest dłuższa budowa i większa baza.
+Pakiet standardowy można awansować do pełnego (`--add-full-model ApplicationSuite`), jeśli potrzebne są tam wszystkie
+referencje (pola, typy, etykiety) i natychmiastowy `xpp_grep`. Kosztem jest dłuższa budowa i większa baza.
+
+Rozmiar indeksu: ok. 0,6 GB bez wywołań standardu, ok. 0,9–1 GB z nimi (typowa maszyna deweloperska, ok. 190 tys. plików standardu).
 
 Pakiety skompilowane przebudowują się same, gdy zmieni się ich `.xref`, `.md` albo zasoby. Ręcznie:
 `xppgraft build --compiled-only --force`. Katalogi, których nie da się zaindeksować wcale, wypisuje `xppgraft status`
@@ -101,21 +105,41 @@ ale `xpp_find`, `xpp_callers` i `xpp_refs` korzystają z zamrożonego indeksu.
 - `FileSystemWatcher` na katalogach modeli pełnego poziomu — zapis z Visual Studio widoczny przy następnym zapytaniu.
 - Skan dat plików przy starcie i co `rescanIntervalSeconds` (domyślnie 5 min) — wyłapuje Get Latest z Team Explorera.
 - Standard: odcisk pakietu (deskryptory + `bin\*.dll`) — przebudowa tylko po aktualizacji platformy.
+- Nowa wersja xpp-graft ze zmienionym analizatorem kodu: modele własne są analizowane od nowa raz, przy następnym
+  starcie (ok. minuty); poziom standardowy przebudowuje się raz w tle, pakiet po pakiecie — przerwana przebudowa
+  wznawia się od miejsca przerwania. Postęp pokazuje `xpp_status`.
 - Zapisy serializowane nazwanym muteksem, więc Claude Desktop i Claude Code mogą działać równolegle.
 
-## Narzędzia MCP
+## Mapa narzędzi
 
-| Narzędzie | Zastosowanie | Poziom standardowy |
-|---|---|---|
-| `xpp_find` | obiekty, metody, pola po nazwie (`*`, `?`, `Obiekt.składowa`; nazwa z kropką sprawdzana też jako pełna nazwa obiektu, np. `*Staging.Contoso` z `type=tableext`) | tak |
-| `xpp_object` | szkielet obiektu: właściwości z etykietami, pola, indeksy, relacje, datasource'y, drzewo kontrolek i menu, metody z zakresami linii, rozszerzenia | tak |
-| `xpp_method` | kod metody + ścieżka i zakres linii + wrappery CoC i handlery | tak |
-| `xpp_extensions` | klasy CoC, rozszerzenia tabel/formularzy, event handlery, klasy pochodne | tak |
-| `xpp_callers` / `xpp_callees` | kto wywołuje metodę / czego używa metoda | nie (tylko CoC i handlery) |
-| `xpp_refs` | wszystkie użycia klasy, tabeli, pola, EDT, enuma, pozycji menu, etykiety | nie |
-| `xpp_grep` | regex po ciałach metod | `standard=true` + filtr modelu (czyta pliki z dysku) |
-| `xpp_label` | rozwiązanie `@SYS…`/`@Model:Klucz` albo szukanie po tekście | tak |
-| `xpp_status` | stan indeksu | — |
+Na co odpowiada każde narzędzie MCP, kiedy Claude powinien po nie sięgnąć i jaki jest odpowiednik w CLI do samodzielnego uruchomienia.
+
+| Narzędzie | Odpowiada na | Kiedy używać | Przykład w CLI |
+|---|---|---|---|
+| `xpp_find` | gdzie są obiekty, metody, pola (`*`, `?`, `Obiekt.składowa`, nazwy rozszerzeń z kropką) | znasz nazwę albo jej fragment | `xppgraft find "Cust*Invoice*; SalesLine.createLine"` |
+| `xpp_object` | szkielet obiektu: właściwości z etykietami, pola, indeksy, relacje, źródła danych, drzewo kontrolek/menu, metody z zakresami linii, rozszerzenia | potrzebna struktura, nie kod | `xppgraft object CustTable --type table` |
+| `xpp_method` | kod metody ze ścieżką pliku i zakresem linii, jej wrappery CoC i handlery | potrzebny kod; przy długich metodach z `match`/`lines` | `xppgraft method SalesTable validateWrite --match "checkFailed" --context 2` |
+| `xpp_callers` | kto wywołuje metodę — najpierw kod własny, potem pakiety skompilowane i kod Microsoftu; z wywołaniami łańcuchowymi (`Table::find().m()`) | wpływ zmiany, „gdzie to jest używane” | `xppgraft callers CustTable creditMax` |
+| `xpp_callees` | czego używa metoda: wywołania (z typem odbiorcy w łańcuchach), new, pola, enumy, intrinsics, etykiety | zrozumienie metody bez czytania jej | `xppgraft callees SalesFormLetter run` |
+| `xpp_refs` | każde użycie klasy, tabeli, pola, EDT, enuma, pozycji menu, etykiety | zmiana nazwy, usuwanie, użycia pola | `xppgraft refs CustTable --member CreditMax` |
+| `xpp_extensions` | klasy CoC (z owiniętymi metodami), rozszerzenia tabel/formularzy, event handlery, klasy pochodne | „co już zmienia ten obiekt” | `xppgraft ext SalesTable` |
+| `xpp_scaffold` | gotowy X++: wrapper CoC, handler zdarzeń tabeli/formularza/źródła danych/kontrolki, subskrybent delegata, handler pre/post — dokładna sygnatura, nazewnictwo z twoich modeli | przed pisaniem rozszerzenia | `xppgraft scaffold coc SalesTable validateWrite --type table` |
+| `xpp_build_errors` | błędy/ostrzeżenia ostatniego builda w Visual Studio, przypięte do linii w pliku XML | po buildzie — poprawki bez wklejania logów | `xppgraft build-errors --severity warning` |
+| `xpp_security` | pozycja menu / formularz → privileges (nadany dostęp) → duties → role, oraz w drugą stronę dla privilege, duty, roli | pytania o dostęp, nowe pozycje menu | `xppgraft security CustTable --type display` |
+| `xpp_join` | najkrótsza ścieżka relacji między dwiema tabelami jako gotowy `select … join … where` | pisanie zapytania przez kilka tabel | `xppgraft join CustInvoiceTrans CustTable` |
+| `xpp_entity` | encja danych: nazwy publiczne, tabela staging, drzewo źródeł danych ze złączeniami, mapowanie pól, klucze; albo encje używające danej tabeli | praca z DMF / OData | `xppgraft entity CustCustomerV3Entity` |
+| `xpp_changed` | obiekty zmienione na dysku od podanego czasu, w podziale na modele | po Get Latest, przegląd własnej pracy | `xppgraft changed --since 3d` |
+| `xpp_grep` | regex po ciałach metod (modele własne; standard z filtrem modelu) | wzorce tekstu, których inne narzędzia nie wyrażą | `xppgraft grep "ttsbegin" --model Contoso*` |
+| `xpp_label` | id etykiety → teksty we wszystkich językach, albo tekst → istniejące id etykiet | ponowne użycie etykiet | `xppgraft label "Credit limit"` |
+| `xpp_status` | stan indeksu, poziomy, praca w tle | sprawdzenie aktualności | `xppgraft status` |
+
+### Kilka zapytań w jednym wywołaniu i fragmenty metod
+
+- `xpp_find` i `xpp_object` przyjmują kilka nazw rozdzielonych `;` — jedno wywołanie, osobna sekcja dla każdej nazwy.
+- `xpp_method` przyjmuje kilka metod: `method="insert;update"` dla jednego obiektu albo `objectName="SalesTable.insert;CustTable::find"`.
+- `xpp_method` z `match` (regex) i/lub `lines` (`120-180`) zwraca tylko te linie (± `context`), ponumerowane numerami
+  linii z pliku; sygnatura i deklaracje zmiennych są zawsze dołączane, a pominięte fragmenty oznaczone
+  `… N line(s)`. Bez tych parametrów zwraca całą metodę, jak dotąd.
 
 ### Drzewo kontrolek i menu
 
@@ -131,15 +155,29 @@ Kontrolki ReferenceGroup pokazują `ref=<datasource>.<ReferenceField>`, `replGro
 i `relPath=<DataRelationPath>`. Elementy rozszerzeń menu pokazują `(under <Parent>)`, `position=<PositionType>`
 i `menuitem=<MenuItemName>`.
 
+## Statystyki użycia
+
+Każde wywołanie MCP jest dopisywane do `%LOCALAPPDATA%\xpp-graft\usage\usage-RRRRMM.jsonl` (narzędzie, argumenty,
+rozmiar odpowiedzi, czas, czy wynik był pusty). Dziennik nigdy nie opuszcza maszyny. Podsumowuje go `xppgraft stats`:
+
+```powershell
+xppgraft stats --days 7 --top 10
+```
+
+Pokazuje dla każdego narzędzia liczbę wywołań, średni / p95 / maksymalny rozmiar odpowiedzi w tokenach (znaki / 4),
+czas i odsetek pustych odpowiedzi, a do tego największe i najwolniejsze wywołania oraz ostatnie puste odpowiedzi —
+miejsca, gdzie narzędzie nie pomogło i Claude zapewne wrócił do czytania plików. Wyłączenie: `xppgraft config --usage-log false`.
+
 ## CLI
 
 ```
-xppgraft find|object|method|callers|callees|refs|ext|grep|label …
+xppgraft find|object|method|callers|callees|refs|ext|scaffold|build-errors|security|join|entity|changed|grep|label …
 xppgraft build [--full-only] [--std-only] [--compiled-only] [--force]
-xppgraft status | detect | config | register | unregister | mcp | version
+xppgraft status | stats | detect | config | register | unregister | mcp | version
 ```
 
-Zmienne: `XPPGRAFT_CONFIG` (inna konfiguracja), `XPPGRAFT_VERBOSE=1` (czasy zapytań SQL na stderr).
+`xppgraft help` wypisuje wszystkie opcje. Zmienne: `XPPGRAFT_CONFIG` (inna konfiguracja), `XPPGRAFT_VERBOSE=1`
+(czasy zapytań SQL na stderr), `XPPGRAFT_TIMING=1` (łączny czas zapytania w CLI).
 
 ## Rozwój narzędzia
 
@@ -148,36 +186,70 @@ Kod źródłowy mieszka **osobno od instalacji**, domyślnie w `C:\Dev\xpp-graft
 ```
 C:\Dev\xpp-graft\
   xpp-graft.sln             solucja dla Visual Studio 2022
-  src\XppGraft\*.cs         kod (14 plików)
+  src\XppGraft\*.cs         kod
   src\XppGraft\Properties\launchSettings.json   profile uruchomieniowe (F5)
+  tests\XppGraft.Tests\     testy xUnit + przykładowe XML-e z AOT (Fixtures)
   build.ps1                 kompilacja; -Deploy podmienia binaria w instalacji
   pack.ps1                  pakiet ZIP do instalacji gdzie indziej
-  install.ps1 uninstall.ps1 README.md README.pl.md
+  install.ps1 uninstall.ps1 README.md README.pl.md CHANGELOG.md LICENSE
   build\  dist\             wyniki (nie trzymaj tu niczego własnego)
 ```
 
 ### Visual Studio
 
 Otwórz `C:\Dev\xpp-graft\xpp-graft.sln` w **Visual Studio 2022** (17.12 lub nowszym — VS 2019 nie obsługuje .NET 9).
-Na pasku narzędzi obok zielonej strzałki wybierz profil z `launchSettings.json` (`status`, `find`,
-`object (form controls)`, `method`, `build compiled packages`, `verbose SQL (status)`) i naciśnij F5 —
-program uruchomi się z debuggerem na prawdziwej konfiguracji i indeksie (`XPPGRAFT_CONFIG` jest ustawione w profilu).
-Własny profil: Debug → *XppGraft Debug Properties* → nowy profil, w „Command line arguments” wpisz polecenie CLI.
+Budowanie: Ctrl+Shift+B. Na pasku narzędzi obok zielonej strzałki wybierz profil z `launchSettings.json`
+(`status`, `stats (MCP usage)`, `find (batch)`, `object (form controls)`, `method (fragment)`, `callers (incl. standard)`,
+`scaffold coc`, `security`, `join`, `entity`, `changed (3 days)`, `build-errors`, `build compiled packages`,
+`verbose SQL (status)`) i naciśnij F5 — program uruchomi się z debuggerem na prawdziwej konfiguracji i indeksie
+(`XPPGRAFT_CONFIG` jest ustawione w profilu). Własny profil: Debug → *XppGraft Debug Properties* → nowy profil,
+w „Command line arguments” wpisz polecenie CLI.
 
 Serwera MCP nie debuguje się przez F5 (rozmawia przez stdin/stdout z Claude'em). Żeby podejrzeć go w działaniu,
 wdroż wersję Debug (`.\build.ps1 -Deploy -Configuration Debug`), zrestartuj Claude'a i w VS użyj
 Debug → *Attach to Process* → `xppgraft.exe`.
 
-Gdzie co dopisać:
+### Testy
+
+Testy nigdy nie dotykają twojego `PackagesLocalDirectory` ani twojego indeksu. Kopiują mały zestaw przykładowych
+pakietów z `tests\XppGraft.Tests\Fixtures\PackagesLocalDirectory` („microsoftowy” pakiet `StdBase` i własny pakiet
+`ContosoCore`, wyłącznie neutralne nazwy) do katalogu tymczasowego, budują tam indeks i sprawdzają odpowiedzi narzędzi.
+
+**W Visual Studio:** Test → *Test Explorer* (Ctrl+E, T) → *Run All Tests* (Ctrl+R, A). Pierwsze uruchomienie
+zbuduje solucję; pojedynczy test można debugować: prawy przycisk → *Debug*.
+
+**Z linii poleceń:**
+
+```powershell
+cd C:\Dev\xpp-graft
+dotnet test                                              # wszystkie testy (ok. 10 s)
+dotnet test --filter "FullyQualifiedName~QueryTests"     # tylko testy narzędzi od początku do końca
+dotnet test --filter "Name~Scaffold"                     # testy, których nazwa zawiera "Scaffold"
+dotnet test --logger "console;verbosity=detailed"        # każdy test i szczegóły porażek
+```
+
+| Plik | Co sprawdza |
+|---|---|
+| `AnalyzerTests.cs` | lekser, nagłówki metod, rozwiązane wywołania, wywołania łańcuchowe (łańcuchy `ret:`), nierozwiązani odbiorcy, sygnatury do szkieletów |
+| `AnalyzerTests.cs` → `HelperTests` | fragmenty metod, informacje o relacjach, parsowanie `since`, ścieżki z wyników builda, listy zbiorcze, dziennik użycia i raport |
+| `QueryTests.cs` | każde narzędzie od początku do końca na indeksie z przykładów: find (podkreślnik, nazwy z kropką, wiele zapytań), object, method (fragment, wiele metod), callers (własne, łańcuchowe, standard), refs, callees, extensions, scaffold, security, join, entity, changed, build errors, etykiety |
+| `IndexFixture.cs` | buduje tymczasowy indeks raz dla wszystkich `QueryTests` |
+
+Dodanie testu: włóż potrzebny XML do `Fixtures` (nazwy neutralne — `Demo*`, `Contoso*`), potem dopisz `[Fact]`
+w `QueryTests.cs`, który woła zapytanie i sprawdza tekst odpowiedzi. Uruchamiaj testy przed każdym commitem.
+
+### Gdzie co dopisać
 
 | Zmiana | Plik |
 |---|---|
-| nowe narzędzie MCP | `McpTools.cs` (deklaracja) + `Queries.cs` (zapytanie) |
+| nowe narzędzie MCP | `McpTools.cs` (deklaracja) + `Queries*.cs` (zapytanie) + polecenie CLI w `Program.cs` + test |
 | inne dane z XML-a (nowy typ obiektu, właściwość, składowa) | `XmlObjectParser.cs` |
-| rozpoznawanie konstrukcji X++ (wywołania, atrybuty, intrinsics) | `CodeAnalyzer.cs`, `XppLexer.cs` |
-| nowa tabela lub indeks w bazie | `Store.cs` — podnieś `SchemaVersion`, co wymusi przebudowę |
+| rozpoznawanie konstrukcji X++ (wywołania, łańcuchy, atrybuty, intrinsics) | `CodeAnalyzer.cs`, `XppLexer.cs` — podnieś `Indexer.AnalyzerVersion` |
+| fragmenty metod | `Fragments.cs` |
+| nowa tabela lub indeks w bazie | `Store.cs` — `EnsureExtras` dla zmian w miejscu, `SchemaVersion` tylko gdy przebudowa jest nieunikniona |
 | odświeżanie, obserwator, poziomy modeli | `IndexService.cs`, `Indexer.cs`, `Catalog.cs` |
 | pakiety bez XML (`.xref`, `bin\*.md`, zasoby z etykietami) | `BinaryPackage.cs` |
+| dziennik użycia i `stats` | `Usage.cs` |
 | polecenia CLI, konfiguracja, rejestracja w Claude | `Program.cs`, `Config.cs`, `Detect.cs` |
 
 Pętla pracy:
@@ -185,7 +257,9 @@ Pętla pracy:
 ```powershell
 .\build.ps1                 # kompilacja do .\build
 .\build\xppgraft.exe find CustTable   # test z linii poleceń, bez restartu Claude'a
+dotnet test                 # testy
 .\build.ps1 -Deploy         # podmiana w instalacji (zatrzymuje działające procesy)
+.\build.ps1 -Test -Deploy   # to samo, ale tylko gdy wszystkie testy przejdą
 ```
 
 Po `-Deploy` zrestartuj Claude Desktop i sesje Claude Code — MCP ładuje binarium przy starcie.
@@ -196,11 +270,14 @@ Dokumentacja jest w dwóch językach: każdą zmianę w `README.pl.md` trzeba od
 
 ## Ograniczenia
 
-- Typy odbiorników wywołań rozwiązywane są z deklaracji zmiennych, bez pełnej analizy typów; łańcuchy `a.b().c()`
-  trafiają do sekcji „receiver type unknown” w `xpp_callers`.
-- `xpp_grep --standard` czyta XML-e z dysku: mały pakiet to sekundy, `ApplicationSuite` to minuty (albo odmowa
-  przy ponad 60 tys. plików). Rozwiązanie: filtr `type`/`object` albo awans pakietu do pełnego poziomu.
-- Makra (`#nazwa`) nie są rozwijane.
+- Typy odbiorców wywołań pochodzą z deklaracji zmiennych i typów zwracanych przez metody (łańcuchy); nie ma pełnego
+  wnioskowania typów — np. elementy kontenerów, `this.pole.metoda()` przez pole innej klasy czy wyniki `as`/rzutowań
+  w wyrażeniach zostają jako „receiver type unknown”.
+- Kod Microsoftu ma tylko wywołania (bez odczytów pól, typów, etykiet); do nich awansuj pakiet do pełnego poziomu albo
+  użyj `xpp_grep --standard` z filtrem modelu (czyta XML z dysku: sekundy dla małego pakietu, minuty dla
+  `ApplicationSuite`, odmowa powyżej 60 tys. plików).
+- Makra (`#nazwa`) nie są rozwijane. Etykieta jest rozpoznawana tylko wtedy, gdy ciąg znaków zawiera samo id etykiety.
 - Pakiety skompilowane: brak kodu źródłowego; skład grup pól i właściwości obiektów nie są odtwarzane
   (format `bin\*.md` jest czytany tylko w nagłówku), a odwołania obejmują tylko to, co zapisał kompilator.
+- `xpp_join` idzie tylko po relacjach tabel (nie po relacjach EDT); `xpp_changed` nie pokazuje usuniętych obiektów.
 - Windows i x64 (pakiet samodzielny); indeks nie jest przenośny między maszynami — buduje się go lokalnie.

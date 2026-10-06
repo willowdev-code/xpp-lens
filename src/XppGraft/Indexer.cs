@@ -40,6 +40,13 @@ public sealed class WriterLock : IDisposable
 
 public sealed class Indexer(Config cfg)
 {
+    /// <summary>
+    /// Bumped whenever code analysis changes what the full tier stores (refs, members). A process that finds an
+    /// older value in the index re-parses the full tier once, so an upgrade needs no manual rebuild.
+    /// 2: chained calls (via "ret:…"), var locals, entity keys / data source joins, entry point grants.
+    /// </summary>
+    public const int AnalyzerVersion = 2;
+
     /// <summary>Only the full tier stores method sources (add a package to extraFullModels to promote it).</summary>
     public static bool StoreSources(ModelInfo m) => m.Full;
 
@@ -50,9 +57,17 @@ public sealed class Indexer(Config cfg)
         return new Mutex(false, name);
     }
 
+    /// <summary>
+    /// What the standard tier stores: with standardCodeRefs it also keeps call references (see
+    /// <see cref="XmlObjectParser"/>), so callers inside Microsoft code are answered from the index.
+    /// </summary>
+    public static string StandardAnalyzer(Config cfg) => $"{AnalyzerVersion}:{(cfg.StandardCodeRefs ? "calls" : "dictionary")}";
+
+    ParseMode ModeFor(ModelInfo m) => m.Full ? ParseMode.Full : cfg.StandardCodeRefs ? ParseMode.StandardCode : ParseMode.Standard;
+
     public SyncStats SyncModel(Store s, ModelInfo m, bool force, Func<IDisposable> writeLock, Action<string>? progress = null)
     {
-        var mode = m.Full ? ParseMode.Full : ParseMode.Standard;
+        var mode = ModeFor(m);
         var stats = new SyncStats();
 
         var db = s.FilesOfModel(m.Id);
@@ -233,7 +248,7 @@ public sealed class Indexer(Config cfg)
             {
                 try
                 {
-                    po = XmlObjectParser.Parse(w.Path, w.Model.Full ? ParseMode.Full : ParseMode.Standard);
+                    po = XmlObjectParser.Parse(w.Path, ModeFor(w.Model));
                 }
                 catch (Exception ex)
                 {

@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AxDataEntityView xmlns:i="http://www.w3.org/2001/XMLSchema-instance" xmlns="Microsoft.Dynamics.AX.Metadata.V6">
+	<Name>DemoCustomerEntity</Name>
+	<SourceCode>
+		<Declaration><![CDATA[
+public class DemoCustomerEntity extends common
+{
+}
+]]></Declaration>
+		<Methods xmlns="" />
+	</SourceCode>
+	<DataManagementEnabled>Yes</DataManagementEnabled>
+	<DataManagementStagingTable>DemoCustomerStaging</DataManagementStagingTable>
+	<IsPublic>Yes</IsPublic>
+	<Label>@DemoLabels:Customer</Label>
+	<PublicCollectionName>DemoCustomers</PublicCollectionName>
+	<PublicEntityName>DemoCustomer</PublicEntityName>
+	<Fields>
+		<AxDataEntityViewField xmlns="" i:type="AxDataEntityViewMappedField">
+			<Name>CustomerAccount</Name>
+			<DataField>AccountNum</DataField>
+			<DataSource>DemoCustomer</DataSource>
+		</AxDataEntityViewField>
+		<AxDataEntityViewField xmlns="" i:type="AxDataEntityViewMappedField">
+			<Name>InvoiceId</Name>
+			<DataField>InvoiceId</DataField>
+			<DataSource>DemoInvoice</DataSource>
+		</AxDataEntityViewField>
+		<AxDataEntityViewField xmlns="" i:type="AxDataEntityViewUnmappedFieldString">
+			<Name>DisplayName</Name>
+			<IsComputedField>Yes</IsComputedField>
+		</AxDataEntityViewField>
+	</Fields>
+	<Keys>
+		<AxDataEntityViewKey xmlns="">
+			<Name>EntityKey</Name>
+			<Fields>
+				<AxDataEntityViewKeyField>
+					<DataField>CustomerAccount</DataField>
+				</AxDataEntityViewKeyField>
+			</Fields>
+		</AxDataEntityViewKey>
+	</Keys>
+	<ViewMetadata>
+		<Name>Metadata</Name>
+		<SourceCode>
+			<Methods />
+		</SourceCode>
+		<DataSources>
+			<AxQuerySimpleRootDataSource>
+				<Name>DemoCustomer</Name>
+				<Table>DemoCustomer</Table>
+				<DataSources>
+					<AxQuerySimpleEmbeddedDataSource>
+						<Name>DemoInvoice</Name>
+						<JoinMode>OuterJoin</JoinMode>
+						<Table>DemoInvoice</Table>
+						<Relations>
+							<AxQuerySimpleDataSourceRelation>
+								<Name>Relation1</Name>
+								<Field>InvoiceAccount</Field>
+								<JoinDataSource>DemoCustomer</JoinDataSource>
+								<RelatedField>AccountNum</RelatedField>
+							</AxQuerySimpleDataSourceRelation>
+						</Relations>
+					</AxQuerySimpleEmbeddedDataSource>
+				</DataSources>
+			</AxQuerySimpleRootDataSource>
+		</DataSources>
+	</ViewMetadata>
+</AxDataEntityView>

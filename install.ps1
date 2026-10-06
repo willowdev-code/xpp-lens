@@ -56,7 +56,7 @@ if ($srcFull -ieq $dstFull) {
 }
 else {
     Copy-Item (Join-Path $src 'bin\*') (Join-Path $InstallDir 'bin') -Recurse -Force
-    foreach ($f in 'install.ps1', 'uninstall.ps1', 'README.md', 'README.pl.md') {
+    foreach ($f in 'install.ps1', 'uninstall.ps1', 'README.md', 'README.pl.md', 'CHANGELOG.md', 'LICENSE') {
         if (Test-Path (Join-Path $src $f)) { Copy-Item (Join-Path $src $f) $InstallDir -Force }
     }
 }

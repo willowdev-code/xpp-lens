@@ -1,0 +1,3 @@
+Customer=Customer
+ ;Label shown on the customer form
+CreditLimit=Credit limit

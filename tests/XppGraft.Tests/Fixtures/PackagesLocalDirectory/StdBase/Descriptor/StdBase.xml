@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AxModelInfo xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
+	<Id>100</Id>
+	<Layer>0</Layer>
+	<Name>StdBase</Name>
+	<Publisher>Microsoft Corporation</Publisher>
+	<VersionMajor>10</VersionMajor>
+</AxModelInfo>

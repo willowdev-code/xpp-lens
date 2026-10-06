@@ -79,8 +79,19 @@ public sealed class IndexService : IDisposable
                 }
                 foreach (var gone in existing.Values) _store.DropModel(gone.Id);
             }
+            _analyzerStale = _store.GetMeta("analyzer") != Indexer.AnalyzerVersion.ToString();
             _needScan = true;
         }
+    }
+
+    /// <summary>The full tier was indexed by an older analyzer: the next full-tier pass re-parses everything once.</summary>
+    volatile bool _analyzerStale;
+
+    void MarkAnalyzerCurrent()
+    {
+        if (!_analyzerStale) return;
+        using (WriteLock()) _store.SetMeta("analyzer", Indexer.AnalyzerVersion.ToString());
+        _analyzerStale = false;
     }
 
     public SyncStats SyncFullTier(bool force, Action<string>? progress = null)
@@ -88,8 +99,10 @@ public sealed class IndexService : IDisposable
         lock (_gate)
         {
             var total = new SyncStats();
+            if (_analyzerStale && !force) Log.Info("index was built by an older analyzer: re-parsing custom models once");
             foreach (var m in Models.Where(m => m.Full))
-                Add(total, _indexer.SyncModel(_store, m, force, WriteLock, progress));
+                Add(total, _indexer.SyncModel(_store, m, force || _analyzerStale, WriteLock, progress));
+            MarkAnalyzerCurrent();
             _dirty.Clear();
             _lastScanUtc = DateTime.UtcNow;
             _needScan = false;
@@ -138,14 +151,20 @@ public sealed class IndexService : IDisposable
         }
         foreach (var pkg in Models.Where(m => !m.Full && !m.Binary).GroupBy(m => m.Package, StringComparer.OrdinalIgnoreCase))
         {
-            var fp = Catalog.PackageFingerprint(Cfg.PackagesDir, pkg.Key);
-            var stale = pkg.Where(m => force || s.Scalar("SELECT fingerprint FROM models WHERE id=$id", ("$id", m.Id)) as string != fp).ToList();
+            // The analyzer is part of the fingerprint: an upgrade re-indexes each package once, and an
+            // interrupted run resumes with the packages that are still stale.
+            var analyzer = "|" + Indexer.StandardAnalyzer(Cfg);
+            var fp = Catalog.PackageFingerprint(Cfg.PackagesDir, pkg.Key) + analyzer;
+            var stale = pkg.Select(m => (Model: m, Stored: s.Scalar("SELECT fingerprint FROM models WHERE id=$id", ("$id", m.Id)) as string))
+                .Where(x => force || x.Stored != fp).ToList();
             if (stale.Count == 0) continue;
-            foreach (var m in stale)
+            foreach (var (m, stored) in stale)
             {
-                BackgroundStatus = $"indexing standard {m.Package}/{m.Name}";
+                // Same files but another analyzer: every file must be parsed again, not only the changed ones.
+                bool reparse = force || stored == null || !stored.EndsWith(analyzer, StringComparison.Ordinal);
+                BackgroundStatus = $"indexing standard {m.Package}/{m.Name}{(reparse && !force ? " (new analyzer)" : "")}";
                 progress?.Invoke(BackgroundStatus);
-                Add(total, _indexer.SyncModel(s, m, force, WriteLock, p => { BackgroundStatus = $"indexing standard {p}"; progress?.Invoke(BackgroundStatus); }));
+                Add(total, _indexer.SyncModel(s, m, reparse, WriteLock, p => { BackgroundStatus = $"indexing standard {p}"; progress?.Invoke(BackgroundStatus); }));
                 using (WriteLock())
                     s.Exec("UPDATE models SET fingerprint=$fp WHERE id=$id", ("$fp", fp), ("$id", m.Id));
             }
@@ -261,7 +280,8 @@ public sealed class IndexService : IDisposable
                 _dirty.Clear();
                 var total = new SyncStats();
                 foreach (var m in Models.Where(m => m.Full))
-                    Add(total, _indexer.SyncModel(_store, m, false, WriteLock));
+                    Add(total, _indexer.SyncModel(_store, m, _analyzerStale, WriteLock));
+                MarkAnalyzerCurrent();
                 _lastScanUtc = DateTime.UtcNow;
                 _needScan = false;
                 if (total.Changed > 0) { _lastChangeUtc = DateTime.UtcNow; _lastChangeCount = total.Changed; }

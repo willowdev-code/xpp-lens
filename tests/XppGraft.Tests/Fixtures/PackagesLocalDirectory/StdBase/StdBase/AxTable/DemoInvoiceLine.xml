@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AxTable xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
+	<Name>DemoInvoiceLine</Name>
+	<SourceCode>
+		<Declaration><![CDATA[
+public class DemoInvoiceLine extends common
+{
+}
+]]></Declaration>
+		<Methods />
+	</SourceCode>
+	<Fields>
+		<AxTableField xmlns="" i:type="AxTableFieldString">
+			<Name>InvoiceId</Name>
+		</AxTableField>
+		<AxTableField xmlns="" i:type="AxTableFieldReal">
+			<Name>Amount</Name>
+		</AxTableField>
+	</Fields>
+	<Relations>
+		<AxTableRelation>
+			<Name>DemoInvoice</Name>
+			<RelatedTable>DemoInvoice</RelatedTable>
+			<Constraints>
+				<AxTableRelationConstraint xmlns="" i:type="AxTableRelationConstraintField">
+					<Name>InvoiceId</Name>
+					<Field>InvoiceId</Field>
+					<RelatedField>InvoiceId</RelatedField>
+				</AxTableRelationConstraint>
+			</Constraints>
+		</AxTableRelation>
+	</Relations>
+</AxTable>

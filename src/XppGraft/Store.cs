@@ -26,8 +26,10 @@ public sealed class Store : IDisposable
         }.ToString();
         Conn = new SqliteConnection(cs);
         Conn.Open();
+        // journal_size_limit: after a big rebuild the WAL file is cut back to 64 MB at the next checkpoint
+        // instead of keeping its peak size on disk while MCP servers hold the database open.
         Exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA busy_timeout=120000; PRAGMA temp_store=MEMORY; " +
-             "PRAGMA cache_size=-262144; PRAGMA mmap_size=2147483648;");
+             "PRAGMA cache_size=-262144; PRAGMA mmap_size=2147483648; PRAGMA journal_size_limit=67108864;");
         try
         {
             // A real write: in WAL mode BEGIN IMMEDIATE alone still succeeds without write access.
@@ -39,7 +41,18 @@ public sealed class Store : IDisposable
             ReadOnly = true;
             Log.Warn($"index is read-only ({path}): {ex.Message}");
         }
-        if (!ReadOnly) EnsureSchema();
+        if (!ReadOnly)
+        {
+            EnsureSchema();
+            EnsureExtras();
+        }
+    }
+
+    /// <summary>Changes after schema 1, applied in place so an upgrade never forces a full rebuild.</summary>
+    void EnsureExtras()
+    {
+        // Cache tables of a 1.2 pre-release that scanned standard XML on demand (replaced by standard call refs).
+        Exec("DROP TABLE IF EXISTS std_refs; DROP TABLE IF EXISTS std_scan;");
     }
 
     public void Dispose() => Conn.Dispose();

@@ -27,6 +27,12 @@ public sealed class Config
 
     public bool IndexStandard { get; set; } = true;
 
+    /// <summary>Also store call references of standard code (callers inside Microsoft code; about +250 MB).</summary>
+    public bool StandardCodeRefs { get; set; } = true;
+
+    /// <summary>Local log of MCP calls (size, time, empty results) read by 'xppgraft stats'. Never leaves the machine.</summary>
+    public bool UsageLog { get; set; } = true;
+
     [JsonIgnore]
     public string? SourcePath { get; set; }
 
@@ -96,7 +102,9 @@ public sealed class Config
         sb.AppendLine($"extraStandardModels:{(ExtraStandardModels.Count == 0 ? "(none)" : string.Join(", ", ExtraStandardModels))}");
         sb.AppendLine($"standardPublishers: {string.Join(", ", StandardPublisherPatterns)}");
         sb.AppendLine($"indexStandard:      {IndexStandard}");
+        sb.AppendLine($"standardCodeRefs:   {StandardCodeRefs}");
         sb.AppendLine($"rescanIntervalSec:  {RescanIntervalSeconds}");
+        sb.AppendLine($"usageLog:           {UsageLog}  ({Usage.Dir})");
         return sb.ToString();
     }
 }

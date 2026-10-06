@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AxTable xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
+	<Name>DemoCustomer</Name>
+	<SourceCode>
+		<Declaration><![CDATA[
+public class DemoCustomer extends common
+{
+}
+]]></Declaration>
+		<Methods>
+			<Method>
+				<Name>find</Name>
+				<Source><![CDATA[
+    public static DemoCustomer find(DemoAccount _account, boolean _forUpdate = false)
+    {
+        DemoCustomer customer;
+
+        customer.selectForUpdate(_forUpdate);
+        select firstonly customer where customer.AccountNum == _account;
+        return customer;
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>creditMax</Name>
+				<Source><![CDATA[
+    public real creditMax()
+    {
+        return this.CreditMax;
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>name</Name>
+				<Source><![CDATA[
+    public str name()
+    {
+        return this.Name;
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>validateWrite</Name>
+				<Source><![CDATA[
+    public boolean validateWrite()
+    {
+        boolean ret = super();
+
+        return ret;
+    }
+
+]]></Source>
+			</Method>
+		</Methods>
+	</SourceCode>
+	<Label>@DemoLabels:Customer</Label>
+	<Fields>
+		<AxTableField xmlns="" i:type="AxTableFieldString">
+			<Name>AccountNum</Name>
+			<ExtendedDataType>DemoAccount</ExtendedDataType>
+			<Mandatory>Yes</Mandatory>
+		</AxTableField>
+		<AxTableField xmlns="" i:type="AxTableFieldString">
+			<Name>Name</Name>
+		</AxTableField>
+		<AxTableField xmlns="" i:type="AxTableFieldReal">
+			<Name>CreditMax</Name>
+		</AxTableField>
+	</Fields>
+	<Indexes>
+		<AxTableIndex>
+			<Name>AccountIdx</Name>
+			<AlternateKey>Yes</AlternateKey>
+			<Fields>
+				<AxTableIndexField>
+					<DataField>AccountNum</DataField>
+				</AxTableIndexField>
+			</Fields>
+		</AxTableIndex>
+	</Indexes>
+</AxTable>

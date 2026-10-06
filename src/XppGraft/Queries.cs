@@ -75,6 +75,31 @@ public sealed partial class Queries(IndexService svc)
         return sb.ToString().TrimEnd();
     }
 
+    // ---------------------------------------------------------------- batches
+
+    public const int MaxBatch = 20;
+
+    /// <summary>"a; b" or one item per line → distinct items (several lookups in one tool call).</summary>
+    internal static List<string> SplitList(string? s) =>
+        string.IsNullOrWhiteSpace(s)
+            ? []
+            : s.Split([';', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+    static string Batch(IReadOnlyList<(string Title, Func<string> Run)> items)
+    {
+        if (items.Count == 1) return items[0].Run();
+        var sb = new StringBuilder();
+        if (items.Count > MaxBatch) sb.AppendLine($"(batch limited to the first {MaxBatch} of {items.Count} items)");
+        foreach (var (title, run) in items.Take(MaxBatch))
+        {
+            sb.AppendLine($"### {title}");
+            sb.AppendLine(run().TrimEnd());
+            sb.AppendLine();
+        }
+        return sb.ToString().TrimEnd();
+    }
+
     // ---------------------------------------------------------------- labels
 
     [GeneratedRegex(@"@[A-Za-z_][A-Za-z0-9_]*:[A-Za-z0-9_.\-]+|@[A-Z]{3}\d+")]
@@ -146,7 +171,12 @@ public sealed partial class Queries(IndexService svc)
 
     // ---------------------------------------------------------------- find
 
-    public string Find(string query, string? kind, string? type, string? model, int limit) => svc.Read(s =>
+    public string Find(string query, string? kind, string? type, string? model, int limit) =>
+        Batch(SplitList(query).Select(q => (q, (Func<string>)(() => FindOne(q, kind, type, model, limit)))).ToList() is { Count: > 0 } items
+            ? items
+            : [(query, () => "nothing found (empty query)")]);
+
+    string FindOne(string query, string? kind, string? type, string? model, int limit) => svc.Read(s =>
     {
         limit = Math.Clamp(limit, 1, 200);
         query = query.Trim();
@@ -276,7 +306,12 @@ public sealed partial class Queries(IndexService svc)
         new("^" + Regex.Escape(pattern.Contains('*') || pattern.Contains('?') ? pattern : $"*{pattern}*")
             .Replace(@"\*", ".*").Replace(@"\?", ".") + "$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
-    public string Object(string name, string? type, string? sections, string? parent = null, int depth = 0, string? filter = null) => svc.Read(s =>
+    public string Object(string name, string? type, string? sections, string? parent = null, int depth = 0, string? filter = null) =>
+        Batch(SplitList(name).Select(n => (n, (Func<string>)(() => ObjectOne(n, type, sections, parent, depth, filter)))).ToList() is { Count: > 0 } items
+            ? items
+            : [(name, () => "No object named '' (empty name).")]);
+
+    string ObjectOne(string name, string? type, string? sections, string? parent, int depth, string? filter) => svc.Read(s =>
     {
         var rows = ObjectRows(s, name, type);
         if (rows.Count == 0) return NotFound(s, name, type);
@@ -463,7 +498,47 @@ public sealed partial class Queries(IndexService svc)
 
     // ---------------------------------------------------------------- method
 
-    public string Method(string objectName, string method, string? type) => svc.Read(s =>
+    /// <summary>
+    /// One or more methods. method may list several names ("a;b") of the same object; without method,
+    /// objectName may list "Object.method" / "Object::method" items. match/lines return a numbered fragment.
+    /// </summary>
+    public string Method(string objectName, string? method, string? type, string? match = null, string? lines = null, int context = 3)
+    {
+        var frag = FragmentSpec.Create(match, lines, context);
+        var pairs = new List<(string Obj, string Method)>();
+        var methods = SplitList(method);
+        if (methods.Count > 0)
+        {
+            foreach (var o in SplitList(objectName))
+                foreach (var m in methods) pairs.Add((o, m));
+        }
+        else
+        {
+            foreach (var item in SplitList(objectName))
+            {
+                int sep = item.IndexOf("::", StringComparison.Ordinal);
+                int len = 2;
+                if (sep < 0) { sep = item.LastIndexOf('.'); len = 1; }
+                if (sep <= 0 || sep + len >= item.Length)
+                    return $"'{item}': pass the method name (method=...), or write it as Object.method.";
+                pairs.Add((item[..sep], item[(sep + len)..]));
+            }
+        }
+        if (pairs.Count == 0) return "pass objectName and method.";
+        return Batch(pairs.Select(p => ($"{p.Obj}.{p.Method}", (Func<string>)(() => MethodOne(p.Obj, p.Method, type, frag)))).ToList());
+    }
+
+    static string Body(List<(int No, string Text)> lines, FragmentSpec? frag)
+    {
+        if (frag != null) return CodeFragment.Render(lines, frag);
+        if (lines.Count == 0) return "(file changed; range not available)";
+        var code = CodeFragment.Plain(lines);
+        return lines.Count > CodeFragment.LongMethodHint
+            ? $"{code}\n({lines.Count} lines — next time pass match=<regex> or lines=<from-to> to get only the part you need)"
+            : code;
+    }
+
+    string MethodOne(string objectName, string method, string? type, FragmentSpec? frag) => svc.Read(s =>
     {
         var tp = TypePattern(type);
         List<(long Id, string? Owner, string Name, int Start, int End, string Type, string Obj, string Path, string Tag)> Load() =>
@@ -496,7 +571,7 @@ public sealed partial class Queries(IndexService svc)
                 {
                     var owner = m.Owner.Length > 0 ? m.Owner + "/" : "";
                     live.Add($"{po.Type} {po.Name}.{owner}{m.Name} {o.Tag}  [file changed since indexing — parsed live]\n" +
-                             $"{o.Path}:{m.StartLine}-{m.EndLine}\n{TrimBlank(m.Source ?? "")}\n");
+                             $"{o.Path}:{m.StartLine}-{m.EndLine}\n{Body(CodeFragment.FromSource(m.Source ?? "", m.StartLine), frag)}\n");
                 }
             }
             catch (Exception ex)
@@ -548,36 +623,13 @@ public sealed partial class Queries(IndexService svc)
                 continue;
             }
             sb.AppendLine($"{r.Path}:{r.Start}-{r.End}");
-            sb.AppendLine(ReadCode(r.Path, r.Start, r.End));
+            sb.AppendLine(Body(CodeFragment.FromFile(r.Path, r.Start, r.End), frag));
             sb.AppendLine();
         }
         var w = CocWrappers(s, objectName, method);
         if (w.Length > 0) sb.AppendLine(w);
         return Finish(sb);
     });
-
-    static string TrimBlank(string code)
-    {
-        var lines = code.Split('\n').Select(l => l.TrimEnd('\r')).ToList();
-        while (lines.Count > 0 && lines[0].Trim().Length == 0) lines.RemoveAt(0);
-        while (lines.Count > 0 && lines[^1].Trim().Length == 0) lines.RemoveAt(lines.Count - 1);
-        return string.Join("\n", lines);
-    }
-
-    static string ReadCode(string path, int start, int end)
-    {
-        var lines = File.ReadLines(path).Skip(Math.Max(0, start - 1)).Take(Math.Max(1, end - start + 1)).ToList();
-        if (lines.Count == 0) return "(file changed; range not available)";
-        var first = lines[0];
-        var cd = first.IndexOf("<![CDATA[", StringComparison.Ordinal);
-        if (cd >= 0) lines[0] = first[(cd + 9)..];
-        var last = lines[^1];
-        var ce = last.IndexOf("]]>", StringComparison.Ordinal);
-        if (ce >= 0) lines[^1] = last[..ce];
-        while (lines.Count > 0 && lines[0].Trim().Length == 0) lines.RemoveAt(0);
-        while (lines.Count > 0 && lines[^1].Trim().Length == 0) lines.RemoveAt(lines.Count - 1);
-        return string.Join("\n", lines);
-    }
 
     static string CocWrappers(Store s, string objectName, string method)
     {
@@ -595,14 +647,18 @@ public sealed partial class Queries(IndexService svc)
 
     // ---------------------------------------------------------------- callers / callees
 
-    public string Callers(string objectName, string method, int depth, int limit) => svc.Read(s =>
+    /// <summary>
+    /// Callers from the index: custom models first, then compiled packages and standard (Microsoft) code
+    /// (calls only — kept when standardCodeRefs is on). standard=false leaves Microsoft callers out.
+    /// </summary>
+    public string Callers(string objectName, string method, int depth, int limit, bool standard = true) => svc.Read(s =>
     {
         depth = Math.Clamp(depth, 1, 4);
         limit = Math.Clamp(limit, 1, 500);
         var sb = new StringBuilder();
         var shownPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        int printed = 0;
+        int printed = 0, unresolvedChains = 0;
 
         void Level(string obj, string m, int d)
         {
@@ -614,7 +670,7 @@ public sealed partial class Queries(IndexService svc)
                 SELECT r.kind, r.line, r.via, so.type, so.name, sm.name, sm.owner, f.path, md.package, md.name, md.tier, r.target
                 FROM refs r JOIN objects so ON so.id = r.object_id JOIN files f ON f.id = r.file_id JOIN models md ON md.id = f.model_id
                 LEFT JOIN methods sm ON sm.id = r.method_id
-                WHERE r.member = $m AND r.target IN ({inList}) AND r.kind IN ('call','coc','handler','intrinsic')
+                WHERE r.member = $m AND r.target IN ({inList}) AND r.kind IN ('call','coc','handler','intrinsic') {(standard ? "" : "AND md.tier <> 0")}
                 ORDER BY md.tier DESC, so.name, sm.name, r.line
                 """, args.ToArray())
                 .Select(r => (Kind: r.GetString(0), Line: r.GetInt32(1), Via: N(r, 2), Type: r.GetString(3), Obj: r.GetString(4),
@@ -622,14 +678,29 @@ public sealed partial class Queries(IndexService svc)
                     Target: r.GetString(11)))
                 .ToList();
 
+            // Calls on a chained receiver ("CustTable::find(x).m()") whose return type resolves to obj or a derived type.
+            var targetSet = new HashSet<string>(targets, StringComparer.OrdinalIgnoreCase);
+            foreach (var c in ChainedRefs(s, m, "'call'"))
+            {
+                if (!standard && c.Tag.EndsWith(", std]", StringComparison.Ordinal)) continue;
+                if (c.Resolved != null && targetSet.Contains(c.Resolved))
+                    rows.Add((c.Kind, c.Line, "chain", c.Type, c.Obj, c.Method, c.Owner, c.Path, c.Tag, c.Resolved));
+                else if (c.Resolved == null && d == 1) unresolvedChains++;
+            }
+
             if (d == 1)
-                sb.AppendLine($"callers of {obj}.{m}{(targets.Count > 1 ? $" (incl. {targets.Count - 1} derived types)" : "")}: {rows.Count} reference(s)");
+            {
+                var std = rows.Count(r => r.Tag.EndsWith(", std]", StringComparison.Ordinal));
+                sb.AppendLine($"callers of {obj}.{m}{(targets.Count > 1 ? $" (incl. {targets.Count - 1} derived types)" : "")}: {rows.Count} reference(s)" +
+                              (std > 0 ? $" — {rows.Count - std} in custom/compiled code, {std} in standard code" : ""));
+                rows = rows.OrderByDescending(r => !r.Tag.EndsWith(", std]", StringComparison.Ordinal)).ToList();
+            }
 
             foreach (var g in rows.GroupBy(r => (r.Type, r.Obj, r.Owner, r.Method)))
             {
                 if (printed++ >= limit) { sb.AppendLine($"{new string(' ', 2 * d)}… limit reached"); return; }
                 var first = g.First();
-                var kinds = g.Select(x => x.Kind == "call" ? (x.Via == "super" ? "super" : null) : x.Kind + (x.Via != null ? ":" + x.Via : ""))
+                var kinds = g.Select(x => x.Kind == "call" ? (x.Via == "super" ? "super" : x.Via == "chain" ? "chained" : null) : x.Kind + (x.Via != null ? ":" + x.Via : ""))
                     .Where(x => x != null).Distinct().ToList();
                 var viaTarget = g.Select(x => x.Target).Distinct(StringComparer.OrdinalIgnoreCase).Where(t => !t.Equals(obj, StringComparison.OrdinalIgnoreCase)).ToList();
                 var path = shownPaths.Add(first.Path) ? "  " + first.Path : "";
@@ -664,19 +735,22 @@ public sealed partial class Queries(IndexService svc)
             }
         }
 
-        var unresolved = Convert.ToInt64(s.Scalar("SELECT COUNT(*) FROM refs WHERE target IS NULL AND member = $m AND kind = 'call'", ("$m", method)));
+        // Receivers we could not type: plain unknown variables, plus chains whose return type is not in the index.
+        var unresolved = Convert.ToInt64(s.Scalar("SELECT COUNT(*) FROM refs WHERE target IS NULL AND member = $m AND kind = 'call' AND via IS NULL", ("$m", method)))
+                         + unresolvedChains;
         if (unresolved > 0)
         {
             var sample = s.Query("""
                 SELECT so.name, sm.name, r.line, md.package, md.name, md.tier
                 FROM refs r JOIN objects so ON so.id = r.object_id JOIN files f ON f.id = r.file_id JOIN models md ON md.id = f.model_id
                 LEFT JOIN methods sm ON sm.id = r.method_id
-                WHERE r.target IS NULL AND r.member = $m AND r.kind = 'call' ORDER BY so.name LIMIT 10
+                WHERE r.target IS NULL AND r.member = $m AND r.kind = 'call' AND r.via IS NULL ORDER BY so.name LIMIT 10
                 """, ("$m", method)).Select(r => $"  {r.GetString(0)}.{N(r, 1)} {Tag(r.GetString(3), r.GetString(4), r.GetInt32(5))} L{r.GetInt32(2)}").ToList();
-            sb.AppendLine($"possible callers with unknown receiver type (any '.{method}(' call): {unresolved}{(unresolved > 10 ? ", first 10" : "")}:");
+            sb.AppendLine($"possible callers with unknown receiver type (any '.{method}(' call in custom code): {unresolved}{(sample.Count == 10 ? ", first 10" : "")}:");
             foreach (var l in sample) sb.AppendLine(l);
         }
-        sb.AppendLine("(code references cover full-tier models; standard tier only has extensions/handlers)");
+        if (standard && !svc.Cfg.StandardCodeRefs)
+            sb.AppendLine("(standard code calls are not indexed: xppgraft config --standard-code true, then xppgraft build --std-only)");
         return Finish(sb);
     });
 
@@ -695,12 +769,19 @@ public sealed partial class Queries(IndexService svc)
             .Select(r => (Kind: r.GetString(0), Target: N(r, 1), Member: N(r, 2), Line: r.GetInt32(3), Via: N(r, 4), Owner: N(r, 5)))
             .ToList();
         if (rows.Count == 0)
-            return $"No references recorded for {objectName}.{method} (method missing, empty, or standard tier).";
+            return $"No references recorded for {objectName}.{method} (method missing or empty; Microsoft code keeps calls only).";
 
         var cache = new Dictionary<string, string?>();
+        var types = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        string Chain(string via, string? member)
+        {
+            var t = ResolveType(s, via[CodeAnalyzer.ChainPrefix.Length..], types);
+            return $"{ChainText(via)}.{member}{(t != null ? $" (= {t}.{member})" : "")}";
+        }
         var sb = new StringBuilder($"references from {objectName}.{method}:\n");
         string Fmt((string Kind, string? Target, string? Member, int Line, string? Via, string? Owner) r) => r.Kind switch
         {
+            "call" or "member" when r.Target == null && r.Via?.StartsWith(CodeAnalyzer.ChainPrefix, StringComparison.Ordinal) == true => Chain(r.Via, r.Member),
             "call" when r.Via == "super" => $"super {r.Target}.{r.Member}",
             "call" when r.Via == "::" => $"{r.Target}::{r.Member}",
             "call" => $"{r.Target ?? "?"}.{r.Member}",
@@ -748,10 +829,20 @@ public sealed partial class Queries(IndexService svc)
 
         var summary = s.Query($"SELECT r.kind, COUNT(*) {from} WHERE {where} GROUP BY r.kind ORDER BY COUNT(*) DESC", args)
             .Select(r => $"{r.GetString(0)}={r.GetInt64(1)}").ToList();
+
+        // Member used on a chained receiver ("CustTable::find(x).AccountNum") — typed from method return types.
+        var chained = new List<ChainRow>();
+        if (!string.IsNullOrWhiteSpace(member) && (string.IsNullOrWhiteSpace(kind) || kind is "call" or "member"))
+        {
+            var types = new HashSet<string>(SelfAndDescendants(s, name), StringComparer.OrdinalIgnoreCase);
+            chained = ChainedRefs(s, member, string.IsNullOrWhiteSpace(kind) ? "'call','member'" : $"'{kind}'", modelLike)
+                .Where(c => c.Resolved != null && types.Contains(c.Resolved)).ToList();
+            if (chained.Count > 0) summary.Add($"chained={chained.Count}");
+        }
         if (summary.Count == 0)
         {
             sb.AppendLine($"no references to {name}{(member != null ? "." + member : "")} in the index.");
-            sb.AppendLine("(code references cover full-tier models; standard tier only has extensions/handlers/extends)");
+            sb.AppendLine("(Microsoft code keeps calls, new, intrinsics, extensions and handlers only — no field reads, types or labels)");
             return Finish(sb);
         }
         sb.AppendLine($"references to {name}{(string.IsNullOrWhiteSpace(member) ? "" : "." + member)}: {string.Join(", ", summary)}");
@@ -778,6 +869,19 @@ public sealed partial class Queries(IndexService svc)
             }
         }
         if (rows.Count == limit) sb.AppendLine($"… limit {limit} reached (narrow with member/kind/model)");
+        if (chained.Count > 0)
+        {
+            sb.AppendLine($"on chained receivers ({chained.Count}):");
+            foreach (var og in chained.Take(limit).GroupBy(c => (c.Type, c.Obj, c.Path)))
+            {
+                sb.AppendLine($"{og.Key.Type} {og.Key.Obj} {og.First().Tag}  {og.Key.Path}");
+                foreach (var mg in og.GroupBy(c => (c.Owner, c.Method)))
+                {
+                    var label = (string.IsNullOrEmpty(mg.Key.Owner) ? "" : mg.Key.Owner + "/") + mg.Key.Method;
+                    sb.AppendLine($"  {label}: {string.Join("; ", mg.Select(c => $"L{c.Line} {c.Kind} {ChainText(c.Via)}.{member}").Distinct())}");
+                }
+            }
+        }
         return Finish(sb);
     });
 

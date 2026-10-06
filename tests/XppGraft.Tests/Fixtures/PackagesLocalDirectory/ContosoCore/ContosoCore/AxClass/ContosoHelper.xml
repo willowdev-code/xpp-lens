@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AxClass xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
+	<Name>ContosoHelper</Name>
+	<SourceCode>
+		<Declaration><![CDATA[
+public class ContosoHelper
+{
+    DemoCustomer cachedCustomer;
+}
+]]></Declaration>
+		<Methods>
+			<Method>
+				<Name>calc_Total</Name>
+				<Source><![CDATA[
+    public real calc_Total()
+    {
+        return cachedCustomer.creditMax();
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>calcXTotal</Name>
+				<Source><![CDATA[
+    public real calcXTotal()
+    {
+        return 0;
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>customer</Name>
+				<Source><![CDATA[
+    public DemoCustomer customer()
+    {
+        return cachedCustomer;
+    }
+
+]]></Source>
+			</Method>
+		</Methods>
+	</SourceCode>
+</AxClass>

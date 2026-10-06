@@ -5,9 +5,14 @@
       "commandLineArgs": "status",
       "environmentVariables": { "XPPGRAFT_CONFIG": "C:\\Tools\\xpp-graft\\xppgraft.json" }
     },
-    "find": {
+    "stats (MCP usage)": {
       "commandName": "Project",
-      "commandLineArgs": "find \"CustTable.*\" --type tableext",
+      "commandLineArgs": "stats --days 7",
+      "environmentVariables": { "XPPGRAFT_CONFIG": "C:\\Tools\\xpp-graft\\xppgraft.json" }
+    },
+    "find (batch)": {
+      "commandName": "Project",
+      "commandLineArgs": "find \"CustTable.*;SalesLine.createLine\" --limit 10",
       "environmentVariables": { "XPPGRAFT_CONFIG": "C:\\Tools\\xpp-graft\\xppgraft.json" }
     },
     "object (form controls)": {
@@ -15,9 +20,44 @@
       "commandLineArgs": "object CustTable --type form --sections controls --depth 2",
       "environmentVariables": { "XPPGRAFT_CONFIG": "C:\\Tools\\xpp-graft\\xppgraft.json" }
     },
-    "method": {
+    "method (fragment)": {
       "commandName": "Project",
-      "commandLineArgs": "method CustTable find",
+      "commandLineArgs": "method SalesTable validateWrite --type table --match \"checkFailed|error\" --context 2",
+      "environmentVariables": { "XPPGRAFT_CONFIG": "C:\\Tools\\xpp-graft\\xppgraft.json" }
+    },
+    "callers (incl. standard)": {
+      "commandName": "Project",
+      "commandLineArgs": "callers CustTable creditMax --limit 30",
+      "environmentVariables": { "XPPGRAFT_CONFIG": "C:\\Tools\\xpp-graft\\xppgraft.json" }
+    },
+    "scaffold coc": {
+      "commandName": "Project",
+      "commandLineArgs": "scaffold coc CustTable validateWrite --type table",
+      "environmentVariables": { "XPPGRAFT_CONFIG": "C:\\Tools\\xpp-graft\\xppgraft.json" }
+    },
+    "security": {
+      "commandName": "Project",
+      "commandLineArgs": "security CustTable --type display",
+      "environmentVariables": { "XPPGRAFT_CONFIG": "C:\\Tools\\xpp-graft\\xppgraft.json" }
+    },
+    "join": {
+      "commandName": "Project",
+      "commandLineArgs": "join CustInvoiceTrans CustTable",
+      "environmentVariables": { "XPPGRAFT_CONFIG": "C:\\Tools\\xpp-graft\\xppgraft.json" }
+    },
+    "entity": {
+      "commandName": "Project",
+      "commandLineArgs": "entity CustCustomerV3Entity --sections props,datasources,keys",
+      "environmentVariables": { "XPPGRAFT_CONFIG": "C:\\Tools\\xpp-graft\\xppgraft.json" }
+    },
+    "changed (3 days)": {
+      "commandName": "Project",
+      "commandLineArgs": "changed --since 3d",
+      "environmentVariables": { "XPPGRAFT_CONFIG": "C:\\Tools\\xpp-graft\\xppgraft.json" }
+    },
+    "build-errors": {
+      "commandName": "Project",
+      "commandLineArgs": "build-errors --severity warning",
       "environmentVariables": { "XPPGRAFT_CONFIG": "C:\\Tools\\xpp-graft\\xppgraft.json" }
     },
     "build compiled packages": {

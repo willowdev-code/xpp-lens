@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AxClass xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
+	<Name>DemoPosting</Name>
+	<SourceCode>
+		<Declaration><![CDATA[
+public class DemoPosting
+{
+}
+]]></Declaration>
+		<Methods>
+			<Method>
+				<Name>post</Name>
+				<Source><![CDATA[
+    public void post(DemoCustomer _customer)
+    {
+        real limit = _customer.creditMax();
+        str customerName = DemoCustomer::find(_customer.AccountNum).name();
+
+        this.posted(_customer);
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>posted</Name>
+				<Source><![CDATA[
+    delegate void posted(DemoCustomer _customer)
+    {
+    }
+
+]]></Source>
+			</Method>
+		</Methods>
+	</SourceCode>
+</AxClass>

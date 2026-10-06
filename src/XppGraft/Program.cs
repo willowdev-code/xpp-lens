@@ -35,6 +35,13 @@ if (cmd is "version" or "--version" or "-v")
 }
 
 var cfg = Config.Load();
+Usage.Enabled = Usage.Enabled && cfg.UsageLog;
+
+if (cmd == "stats")
+{
+    Console.WriteLine(Usage.Report(int.Parse(Opt("days") ?? "7"), int.Parse(Opt("top") ?? "10")));
+    return 0;
+}
 
 if (cmd == "mcp")
 {
@@ -122,6 +129,8 @@ if (cmd == "config")
     if (Opt("display-language") is { } dl) { cfg.DisplayLanguage = dl; changed = true; }
     if (Opt("rescan-seconds") is { } rs) { cfg.RescanIntervalSeconds = int.Parse(rs); changed = true; }
     if (Opt("index-standard") is { } istd) { cfg.IndexStandard = istd is "1" or "true" or "yes"; changed = rebuild = true; }
+    if (Opt("standard-code") is { } sc) { cfg.StandardCodeRefs = sc is "1" or "true" or "yes"; changed = rebuild = true; }
+    if (Opt("usage-log") is { } ul) { cfg.UsageLog = ul is "1" or "true" or "yes"; changed = true; }
     SetList(cfg.LabelLanguages, "add-language", "remove-language", "languages");
     SetList(cfg.ExtraFullModels, "add-full-model", "remove-full-model", "full-models");
     SetList(cfg.ExtraStandardModels, "add-standard-model", "remove-standard-model", "standard-models");
@@ -224,16 +233,24 @@ if (cmd is "help" or "-h" or "--help")
                           --add-full-model XPL | --remove-full-model XPL | --full-models A,B
                           --add-standard-model X | --remove-standard-model X
                           --add-standard-publisher "Contoso" | --standard-publishers Microsoft
-                          --index-standard true|false | --rescan-seconds 300
+                          --index-standard true|false | --standard-code true|false
+                          --rescan-seconds 300 | --usage-log true|false
           xppgraft build [--full-only] [--std-only] [--compiled-only] [--force]   build / update the index
           xppgraft status
-          xppgraft find <query> [--kind any|object|method|field] [--type t] [--model m] [--limit n]
-          xppgraft object <name> [--type t] [--sections list] [--parent control] [--depth n] [--filter *text*]
-          xppgraft method <object> <method> [--type t]
-          xppgraft callers <object> <method> [--depth n] [--limit n]
+          xppgraft stats [--days 7] [--top 10]                   tokens, time and empty answers of MCP calls
+          xppgraft find <query[;query…]> [--kind any|object|method|field] [--type t] [--model m] [--limit n]
+          xppgraft object <name[;name…]> [--type t] [--sections list] [--parent control] [--depth n] [--filter *text*]
+          xppgraft method <object> [<method[;method…]>] [--type t] [--match regex] [--lines from-to] [--context n]
+          xppgraft callers <object> <method> [--depth n] [--limit n] [--standard true|false]
           xppgraft callees <object> <method> [--type t]
           xppgraft refs <name> [--member m] [--kind k] [--model m] [--limit n]
           xppgraft ext <name>
+          xppgraft scaffold coc|event|delegate|pre|post <object> <member> [--element ds|ds.field|control] [--class name] [--type t]
+          xppgraft build-errors [--model m] [--severity error|warning|all] [--limit n]
+          xppgraft security <menuitem|form|privilege|duty|role> [--type t] [--limit n]
+          xppgraft join <fromTable> <toTable> [--hops n] [--limit n]
+          xppgraft entity <entity|publicName|table> [--sections list] [--limit n]
+          xppgraft changed [--since 24h|3d|2026-10-01] [--model m] [--type t] [--limit n]
           xppgraft grep <regex> [--model m] [--type t] [--object o] [--standard] [--limit n]
           xppgraft label <@id|text> [--lang l] [--limit n]
           xppgraft mcp                                           MCP server over stdio
@@ -299,15 +316,33 @@ try
         {
             service.SyncCatalog();
             var q = new Queries(service);
+
+            // Options first: the method name is an optional second positional argument.
+            string MethodCommand()
+            {
+                var type = Opt("type");
+                var match = Opt("match");
+                var lines = Opt("lines");
+                var context = int.Parse(Opt("context") ?? "3");
+                return q.Method(Arg(0), rest.Count > 1 ? rest[1] : null, type, match, lines, context);
+            }
+
             string output = cmd switch
             {
                 "find" => q.Find(Arg(0), Opt("kind"), Opt("type"), Opt("model"), int.Parse(Opt("limit") ?? "40")),
                 "object" => q.Object(Arg(0), Opt("type"), Opt("sections"), Opt("parent"), int.Parse(Opt("depth") ?? "0"), Opt("filter")),
-                "method" => q.Method(Arg(0), Arg(1), Opt("type")),
-                "callers" => q.Callers(Arg(0), Arg(1), int.Parse(Opt("depth") ?? "1"), int.Parse(Opt("limit") ?? "80")),
+                "method" => MethodCommand(),
+                "callers" => q.Callers(Arg(0), Arg(1), int.Parse(Opt("depth") ?? "1"), int.Parse(Opt("limit") ?? "80"),
+                    Opt("standard") is not ("0" or "false" or "no")),
                 "callees" => q.Callees(Arg(0), Arg(1), Opt("type")),
                 "refs" => q.Refs(Arg(0), Opt("member"), Opt("kind"), Opt("model"), int.Parse(Opt("limit") ?? "150")),
                 "ext" => q.Extensions(Arg(0)),
+                "scaffold" => q.Scaffold(Arg(0), Arg(1), Arg(2), Opt("element"), Opt("class"), Opt("type")),
+                "build-errors" => q.BuildErrors(Opt("model"), Opt("severity"), int.Parse(Opt("limit") ?? "50")),
+                "security" => q.Security(Arg(0), Opt("type"), int.Parse(Opt("limit") ?? "40")),
+                "join" => q.Join(Arg(0), Arg(1), int.Parse(Opt("hops") ?? "3"), int.Parse(Opt("limit") ?? "3")),
+                "entity" => q.Entity(Arg(0), Opt("sections"), int.Parse(Opt("limit") ?? "200")),
+                "changed" => q.Changed(Opt("since"), Opt("model"), Opt("type"), int.Parse(Opt("limit") ?? "100")),
                 "grep" => q.Grep(Arg(0), Opt("model"), Opt("type"), Opt("object"), Flag("standard"), int.Parse(Opt("limit") ?? "80")),
                 "label" => q.Label(Arg(0), Opt("lang"), int.Parse(Opt("limit") ?? "30")),
                 _ => throw new ArgumentException($"unknown command '{cmd}' (see xppgraft help)"),

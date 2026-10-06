@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AxClass xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
+	<Name>DemoStdHandlers</Name>
+	<SourceCode>
+		<Declaration><![CDATA[
+public final class DemoStdHandlers
+{
+}
+]]></Declaration>
+		<Methods>
+			<Method>
+				<Name>DemoInvoice_onInserted</Name>
+				<Source><![CDATA[
+    [DataEventHandler(tableStr(DemoInvoice), DataEventType::Inserted)]
+    public static void DemoInvoice_onInserted(Common sender, DataEventArgs e)
+    {
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>DemoInvoice_onValidatedWrite</Name>
+				<Source><![CDATA[
+    [DataEventHandler(tableStr(DemoInvoice), DataEventType::ValidatedWrite)]
+    public static void DemoInvoice_onValidatedWrite(Common sender, DataEventArgs e)
+    {
+    }
+
+]]></Source>
+			</Method>
+		</Methods>
+	</SourceCode>
+</AxClass>

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Diagnostics
+  GenerationTime="2020-01-01T10:00:00.0000000+00:00">
+  <Items>
+    <Diagnostic>
+      <DiagnosticType>Compile</DiagnosticType>
+      <Severity>Error</Severity>
+      <Path>dynamics://Class/ContosoInvoiceService/Method/run</Path>
+      <Moniker>UndeclaredVariable</Moniker>
+      <Message>Variable 'limitX' has not been declared.</Message>
+      <Line>8</Line>
+      <Column>9</Column>
+    </Diagnostic>
+    <Diagnostic>
+      <DiagnosticType>BestPractices</DiagnosticType>
+      <Severity>Warning</Severity>
+      <Path>dynamics://Class/ContosoHelper/Method/calcXTotal</Path>
+      <Moniker>BPUnusedMethod</Moniker>
+      <Message>Method is not used.</Message>
+      <Line>1</Line>
+      <Column>5</Column>
+    </Diagnostic>
+  </Items>
+  <Aliases />
+</Diagnostics>

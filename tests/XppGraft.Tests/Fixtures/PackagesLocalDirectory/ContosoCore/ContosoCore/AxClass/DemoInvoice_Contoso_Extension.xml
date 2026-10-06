@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AxClass xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
+	<Name>DemoInvoice_Contoso_Extension</Name>
+	<SourceCode>
+		<Declaration><![CDATA[
+[ExtensionOf(tableStr(DemoInvoice))]
+final class DemoInvoice_Contoso_Extension
+{
+}
+]]></Declaration>
+		<Methods />
+	</SourceCode>
+</AxClass>

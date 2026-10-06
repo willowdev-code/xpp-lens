@@ -43,7 +43,7 @@ Write-Host "publishing ($(if ($FrameworkDependent) { 'requires .NET 9' } else { 
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed" }
 
 Remove-Item (Join-Path $stage 'bin\*.pdb') -Force -ErrorAction SilentlyContinue
-foreach ($f in 'install.ps1', 'uninstall.ps1', 'README.md', 'README.pl.md') {
+foreach ($f in 'install.ps1', 'uninstall.ps1', 'README.md', 'README.pl.md', 'CHANGELOG.md', 'LICENSE') {
     Copy-Item (Join-Path $PSScriptRoot $f) $stage -Force
 }
 

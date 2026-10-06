@@ -4,10 +4,11 @@ namespace XppGraft;
 
 /// <summary>
 /// Standard: dictionary tier (signatures, members without controls, extension/handler attributes).
-/// Full: + method sources, code references, metadata references, labels.
+/// StandardCode: Standard + call references from method bodies (who calls what), no sources.
+/// Full: + method sources, all code references, metadata references, labels.
 /// Render: Full + everything needed to print an object skeleton.
 /// </summary>
-public enum ParseMode { Standard, Full, Render }
+public enum ParseMode { Standard, StandardCode, Full, Render }
 
 public sealed class ParsedMethod
 {
@@ -75,6 +76,7 @@ public static class XmlObjectParser
         public List<string>? ChildNames;
         public int MemberIndex = -1;
         public int Seq;
+        public List<string>? RelationPairs;
 
         public string? Leaf(string k) => Leafs != null && Leafs.TryGetValue(k, out var v) ? v : null;
     }
@@ -140,9 +142,33 @@ public static class XmlObjectParser
         return Parse(fs, Path.GetFileNameWithoutExtension(path), mode);
     }
 
+    static readonly XmlReaderSettings Settings = new()
+    {
+        IgnoreComments = true,
+        IgnoreProcessingInstructions = true,
+        DtdProcessing = DtdProcessing.Ignore,
+        CloseInput = false,
+    };
+
     public static ParsedObject Parse(Stream stream, string fallbackName, ParseMode mode)
     {
-        bool full = mode != ParseMode.Standard;
+        using var r = XmlReader.Create(stream, Settings);
+        return Parse(r, fallbackName, mode, null);
+    }
+
+    /// <summary>
+    /// Parses XML already in memory. <paramref name="analyze"/> limits code analysis (full mode) to the method
+    /// bodies it accepts — the declaration is always analysed so member variables still resolve.
+    /// </summary>
+    public static ParsedObject ParseText(string xml, string fallbackName, ParseMode mode, Func<string, bool>? analyze = null)
+    {
+        using var r = XmlReader.Create(new StringReader(xml), Settings);
+        return Parse(r, fallbackName, mode, analyze);
+    }
+
+    static ParsedObject Parse(XmlReader r, string fallbackName, ParseMode mode, Func<string, bool>? analyze)
+    {
+        bool full = mode is ParseMode.Full or ParseMode.Render;
         var obj = new ParsedObject();
         var blocks = new List<CodeBlock>();
         var stack = new List<Frame>(32);
@@ -150,15 +176,6 @@ public static class XmlObjectParser
         var controlVars = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var pendingFieldRefs = new List<(string Ds, string Field, string Via, int Line)>();
         int seq = 0;
-
-        var settings = new XmlReaderSettings
-        {
-            IgnoreComments = true,
-            IgnoreProcessingInstructions = true,
-            DtdProcessing = DtdProcessing.Ignore,
-            CloseInput = false,
-        };
-        using var r = XmlReader.Create(stream, settings);
         var li = (IXmlLineInfo)r;
 
         string Describe(Frame f) => f.Name != null ? $"{f.Local}:{f.Name}" : f.Local;
@@ -246,7 +263,7 @@ public static class XmlObjectParser
                 if (f.Leaf("IsComputedField") == "Yes") parts.Add("computed");
                 AddMember(f, "field", string.Join(" ", parts), parent);
             }
-            else if (f.Local is "AxTableIndex" or "AxViewIndex")
+            else if (f.Local is "AxTableIndex" or "AxViewIndex" or "AxDataEntityViewKey")
             {
                 if (f.Leaf("AllowDuplicates") != "Yes") parts.Add("unique");
                 if (f.Leaf("AlternateKey") == "Yes") parts.Add("AK");
@@ -278,14 +295,43 @@ public static class XmlObjectParser
                 if (table != null) parts.Add(table);
                 P("JoinSource", "join");
                 P("LinkType", "link");
-                AddMember(f, "datasource", string.Join(" ", parts), parent);
+                P("JoinMode", "joinMode");
+                if (f.Leaf("UseRelations") == "Yes") parts.Add("useRelations");
+                if (f.RelationPairs is { Count: > 0 }) parts.Add($"on {string.Join(", ", f.RelationPairs)}");
+                if (f.Name != null)
+                    obj.Members.Add(new ParsedMember
+                    {
+                        Kind = "datasource", Name = f.Name, Info = string.Join(" ", parts).Trim(),
+                        Depth = stack.Count(fr => DataSourceElements.Contains(fr.Local)) + 1,
+                        Path = TreePath(f, fr => DataSourceElements.Contains(fr.Local)),
+                        Order = f.Seq,
+                    });
+            }
+            else if (f.Local.EndsWith("DataSourceRelation", StringComparison.Ordinal))
+            {
+                // Query / entity data source join: Field = RelatedField of the enclosing data source.
+                if (f.Leaf("Field") is { } a1 && f.Leaf("RelatedField") is { } b1)
+                {
+                    for (int k = stack.Count - 1; k >= 0; k--)
+                        if (DataSourceElements.Contains(stack[k].Local))
+                        {
+                            var src = f.Leaf("JoinDataSource") is { } jds ? $"{jds}." : "";
+                            (stack[k].RelationPairs ??= []).Add($"{a1}={src}{b1}");
+                            break;
+                        }
+                }
+            }
+            else if (f.Local == "Grant" && parent.Local == "AxSecurityEntryPointReference" && f.Leafs != null)
+            {
+                var allowed = f.Leafs.Where(kv => kv.Value == "Allow").Select(kv => kv.Key).ToList();
+                if (allowed.Count > 0) (parent.Leafs ??= new Dictionary<string, string>(StringComparer.Ordinal)).TryAdd("Grant", string.Join(",", allowed));
             }
             else if (ControlElements.Contains(f.Local))
             {
                 var t = ShortType(f.IType, "AxForm") ?? f.Leaf("Type") ?? "";
                 if (f.Leaf("AutoDeclaration") == "Yes" && f.Name != null && f.IType != null)
                     controlVars[f.Name] = "Form" + t + "Control";
-                if (mode != ParseMode.Standard && f.Name != null)
+                if (full && f.Name != null)
                 {
                     parts.Add(t);
                     if (f.Leaf("DataSource") is { } ds)
@@ -332,6 +378,7 @@ public static class XmlObjectParser
                 P("ObjectType");
                 P("ObjectName");
                 P("Forms");
+                P("Grant", "grant");
                 AddMember(f, "entrypoint", string.Join(" ", parts), parent);
             }
             else if (IsMenuElement(f) || f.Local.StartsWith("AxMenuElement", StringComparison.Ordinal))
@@ -479,14 +526,27 @@ public static class XmlObjectParser
                     Line = line, Kind = "meta", Target = dsTables.TryGetValue(ds, out var t) ? t : ds, Member = field, Via = via,
                 });
 
-        AnalyzeCode(obj, blocks, mode, dsTables, controlVars);
+        AnalyzeCode(obj, blocks, mode, dsTables, controlVars, analyze);
         return obj;
     }
 
-    static void AnalyzeCode(ParsedObject obj, List<CodeBlock> blocks, ParseMode mode, Dictionary<string, string> dsTables,
-        Dictionary<string, string> controlVars)
+    /// <summary>
+    /// Standard tier keeps only what answers "who calls / creates / wraps / handles X": calls with a known or
+    /// chained receiver, new, intrinsics, CoC, handlers, inheritance. Field reads, types and labels of Microsoft
+    /// code would multiply the index size for little use.
+    /// </summary>
+    static bool KeepInStandard(CodeRef r) => r.Kind switch
     {
-        bool full = mode != ParseMode.Standard;
+        "call" => r.Target != null || r.Via != null,
+        "new" or "intrinsic" or "coc" or "handler" or "extends" or "implements" => true,
+        _ => false,
+    };
+
+    static void AnalyzeCode(ParsedObject obj, List<CodeBlock> blocks, ParseMode mode, Dictionary<string, string> dsTables,
+        Dictionary<string, string> controlVars, Func<string, bool>? analyze)
+    {
+        bool full = mode is ParseMode.Full or ParseMode.Render;
+        bool code = full || mode == ParseMode.StandardCode;
         bool isForm = obj.Type == "AxForm";
         var ctx = new CodeContext
         {
@@ -502,7 +562,8 @@ public static class XmlObjectParser
 
         foreach (var b in blocks.Where(x => x.IsDeclaration).Concat(blocks.Where(x => !x.IsDeclaration)))
         {
-            var toks = XppLexer.Tokenize(b.Text, stopAtFirstBrace: !full);
+            bool deep = code && (analyze == null || b.IsDeclaration || analyze(b.Text));
+            var toks = XppLexer.Tokenize(b.Text, stopAtFirstBrace: !deep);
             var h = CodeAnalyzer.ParseHeader(b.Text, toks);
             var endLine = b.Line + CountLines(b.Text) - (b.Text.EndsWith('\n') ? 1 : 0);
             var m = new ParsedMethod
@@ -546,7 +607,7 @@ public static class XmlObjectParser
                     if (e.Func.StartsWith("form", StringComparison.OrdinalIgnoreCase)) ctx.ElementType = e.Args[0];
                 }
                 ctx.Extends = obj.Extends;
-                if (full)
+                if (code)
                 {
                     foreach (var kv in CodeAnalyzer.Declarations(toks, h.BodyTokenStart, crefs, b.Line))
                         ctx.ClassVars[kv.Key] = kv.Value;
@@ -554,7 +615,7 @@ public static class XmlObjectParser
                     CodeAnalyzer.BodyRefs(ctx, toks, h.BodyTokenStart, b.Line, crefs, null);
                 }
             }
-            else if (full)
+            else if (deep)
             {
                 ctx.MethodName = b.Name;
                 ctx.Owner = b.Owner;
@@ -573,6 +634,7 @@ public static class XmlObjectParser
 
             foreach (var cr in crefs)
             {
+                if (mode == ParseMode.StandardCode && !KeepInStandard(cr)) continue;
                 if (!seen.Add((mi, cr.Line, cr.Kind, cr.Target, cr.Member))) continue;
                 obj.Refs.Add(new ParsedRef
                 {
