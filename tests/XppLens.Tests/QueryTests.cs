@@ -10,20 +10,32 @@ public class QueryTests(IndexFixture fx)
     public void Catalog_puts_publishers_in_tiers()
     {
         var status = fx.Service.StatusText();
-        Assert.Contains("full tier: 1 models", status);
-        Assert.Contains("standard tier: 1 models", status);
-        Assert.Contains("full-tier models: ContosoCore", status);
+        Assert.StartsWith($"xpp-lens {Updater.Current}", status);
+        Assert.Contains("| full (custom code) | 1 |", status);
+        Assert.Contains("| standard (Microsoft) | 1 |", status);
+        Assert.Contains("full-tier models (1): ContosoCore", status);
     }
 
     [Fact]
     public void Status_skips_slow_counts_unless_asked()
     {
         var quick = fx.Service.StatusText();
-        Assert.DoesNotContain("  refs:", quick);
+        Assert.Contains("| objects | methods | members | sources | refs | labels |", quick);
         Assert.Contains("not counted", quick);
         var full = fx.Service.StatusText(counts: true);
-        Assert.Contains("  refs:", full);
-        Assert.Contains("  labels:", full);
+        Assert.Contains("| objects | methods | members | sources | refs | labels |", full);
+        Assert.DoesNotContain("not counted", full);
+    }
+
+    [Fact]
+    public void Status_draws_console_tables()
+    {
+        var box = fx.Service.StatusText(style: TableStyle.Box);
+        Assert.Contains("┌", box);
+        Assert.Contains("│ full (custom code)", box);
+        var ascii = fx.Service.StatusText(style: TableStyle.Ascii);
+        Assert.Contains("| full (custom code)", ascii);
+        Assert.DoesNotContain("│", ascii);
     }
 
     [Fact]
@@ -227,14 +239,32 @@ public class QueryTests(IndexFixture fx)
     public void Build_errors_map_to_file_lines()
     {
         var res = Q.BuildErrors(null, null, 50);
-        Assert.Contains("ContosoCore — built", res);
+        Assert.Contains("ContosoCore — project build", res);
+        Assert.Contains(": 1 warning | model build", res);
         Assert.Contains("1 error, 1 warning", res);
         // Compiler line 8: declaration has 2 lines, run starts at file line 14 → its 6th line is file line 19.
         Assert.Contains("Error AxClass ContosoInvoiceService.run → ", res);
         Assert.Contains("ContosoInvoiceService.xml:19:9", res);
         Assert.Contains("[file changed after this build", res);
         Assert.DoesNotContain("BPUnusedMethod", res);
-        Assert.Contains("BPUnusedMethod", Q.BuildErrors(null, "warning", 50));
+        var warnings = Q.BuildErrors(null, "warning", 50);
+        Assert.Contains("BPUnusedMethod", warnings);
+        Assert.Contains("Warning AxClass ContosoEventHandlers", warnings);
+    }
+
+    [Fact]
+    public void Build_errors_list_objects_not_compiled_yet()
+    {
+        // Project build 2025, ContosoHelper.xml saved minutes ago, the other files in 2024 (between the two builds).
+        var res = Q.BuildErrors("ContosoCore", null, 50);
+        Assert.Contains("not compiled yet — 1 object(s) changed after the project build", res);
+        Assert.Contains("AxClass ContosoHelper", res);
+        Assert.Contains("changed between the model build and the project build", res);
+
+        var since = Q.Changed("build", null, null, 100);
+        Assert.Contains("ContosoCore — 1 object(s) changed after the project build", since);
+        Assert.Contains("AxClass ContosoHelper", since);
+        Assert.DoesNotContain("ContosoInvoiceService", since);
     }
 
     [Fact]

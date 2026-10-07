@@ -130,14 +130,14 @@ Na co odpowiada każde narzędzie MCP, kiedy Claude powinien po nie sięgnąć i
 | `xpp_refs` | każde użycie klasy, tabeli, pola, EDT, enuma, pozycji menu, etykiety | zmiana nazwy, usuwanie, użycia pola | `xpplens refs CustTable --member CreditMax` |
 | `xpp_extensions` | klasy CoC (z owiniętymi metodami), rozszerzenia tabel/formularzy, event handlery, klasy pochodne | „co już zmienia ten obiekt” | `xpplens ext SalesTable` |
 | `xpp_scaffold` | gotowy X++: wrapper CoC, handler zdarzeń tabeli/formularza/źródła danych/kontrolki, subskrybent delegata, handler pre/post — dokładna sygnatura, nazewnictwo z twoich modeli | przed pisaniem rozszerzenia | `xpplens scaffold coc SalesTable validateWrite --type table` |
-| `xpp_build_errors` | błędy/ostrzeżenia ostatniego builda w Visual Studio, przypięte do linii w pliku XML | po buildzie — poprawki bez wklejania logów | `xpplens build-errors --severity warning` |
+| `xpp_build_errors` | błędy/ostrzeżenia ostatniego builda w Visual Studio (modelu albo projektu), przypięte do linii w pliku XML; obiekty zmienione po buildzie (jeszcze nieskompilowane) | po buildzie — poprawki bez wklejania logów, sprawdzenie, czy wszystko weszło | `xpplens build-errors --severity warning` |
 | `xpp_security` | pozycja menu / formularz → privileges (nadany dostęp) → duties → role, oraz w drugą stronę dla privilege, duty, roli | pytania o dostęp, nowe pozycje menu | `xpplens security CustTable --type display` |
 | `xpp_join` | najkrótsza ścieżka relacji między dwiema tabelami jako gotowy `select … join … where` | pisanie zapytania przez kilka tabel | `xpplens join CustInvoiceTrans CustTable` |
 | `xpp_entity` | encja danych: nazwy publiczne, tabela staging, drzewo źródeł danych ze złączeniami, mapowanie pól, klucze; albo encje używające danej tabeli | praca z DMF / OData | `xpplens entity CustCustomerV3Entity` |
-| `xpp_changed` | obiekty zmienione na dysku od podanego czasu, w podziale na modele | po Get Latest, przegląd własnej pracy | `xpplens changed --since 3d` |
+| `xpp_changed` | obiekty zmienione na dysku od podanego czasu, w podziale na modele; `since=build`: zmienione po ostatnim buildzie | po Get Latest, przegląd własnej pracy, przed buildem | `xpplens changed --since 3d`, `xpplens changed --since build` |
 | `xpp_grep` | regex po ciałach metod (modele własne; standard z filtrem modelu) | wzorce tekstu, których inne narzędzia nie wyrażą | `xpplens grep "ttsbegin" --model Contoso*` |
 | `xpp_label` | id etykiety → teksty we wszystkich językach, albo tekst → istniejące id etykiet | ponowne użycie etykiet | `xpplens label "Credit limit"` |
-| `xpp_status` | stan indeksu, poziomy, praca w tle | sprawdzenie aktualności | `xpplens status` |
+| `xpp_status` | wersja, poziomy indeksu i liczniki w tabelkach, praca w tle | sprawdzenie aktualności | `xpplens status` (`--ascii` — ramki z `+-\|`) |
 
 ### Kilka zapytań w jednym wywołaniu i fragmenty metod
 
@@ -179,7 +179,7 @@ miejsca, gdzie narzędzie nie pomogło i Claude zapewne wrócił do czytania pli
 ```
 xpplens find|object|method|callers|callees|refs|ext|scaffold|build-errors|security|join|entity|changed|grep|label …
 xpplens build [--full-only] [--std-only] [--compiled-only] [--force]
-xpplens status [--counts] | stats | update [--install] | detect | config | register | unregister | mcp | version
+xpplens status [--counts] [--ascii] | stats | update [--install] | detect | config | register | unregister | mcp | version
 ```
 
 `xpplens help` wypisuje wszystkie opcje. Zmienne: `XPPLENS_CONFIG` (inna konfiguracja), `XPPLENS_VERBOSE=1`

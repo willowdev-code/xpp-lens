@@ -20,7 +20,8 @@ public sealed class IndexFixture : IDisposable
         var packages = Path.Combine(Root, "PackagesLocalDirectory");
         CopyDir(Path.Combine(AppContext.BaseDirectory, "Fixtures", "PackagesLocalDirectory"), packages);
 
-        // Old time stamps everywhere (after the 2020 build in BuildModelResult.xml), one recent file.
+        // Old time stamps everywhere (after the 2020 model build in BuildModelResult.xml, before the 2025 project build
+        // in BuildProjectResult.xml), one recent file.
         var old = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         foreach (var f in Directory.EnumerateFiles(packages, "*", SearchOption.AllDirectories))
             File.SetLastWriteTimeUtc(f, Path.GetFileName(f) == RecentFile ? DateTime.UtcNow.AddMinutes(-5) : old);

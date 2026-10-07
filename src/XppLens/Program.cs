@@ -28,6 +28,34 @@ string Arg(int i) => i < rest.Count ? rest[i] : throw new ArgumentException($"mi
 
 static string AppVersion() => typeof(Config).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
 
+// Box-drawing frames on a console (UTF-8 for the time of writing them); +-| when redirected to a file or pipe.
+static void PrintTables(Func<TableStyle, string> render, bool ascii)
+{
+    if (ascii || Console.IsOutputRedirected)
+    {
+        Console.WriteLine(render(TableStyle.Ascii));
+        return;
+    }
+    var previous = Console.OutputEncoding;
+    try
+    {
+        Console.OutputEncoding = System.Text.Encoding.UTF8;
+    }
+    catch (IOException)
+    {
+        Console.WriteLine(render(TableStyle.Ascii));
+        return;
+    }
+    try
+    {
+        Console.WriteLine(render(TableStyle.Box));
+    }
+    finally
+    {
+        Console.OutputEncoding = previous;
+    }
+}
+
 if (cmd is "version" or "--version" or "-v")
 {
     Console.WriteLine($"xpp-lens {AppVersion()} — Copyright © 2026 WillowDev");
@@ -250,7 +278,8 @@ if (cmd is "help" or "-h" or "--help")
                           --rescan-seconds 300 | --usage-log true|false
           xpplens build [--full-only] [--std-only] [--compiled-only] [--force]   build / update the index
                         (--std-only also switches indexStandard on when an installation was made without it)
-          xpplens status [--counts]                              --counts: also count references and labels (slow on a cold disk)
+          xpplens status [--counts] [--ascii]                    --counts: also count references and labels (slow on a cold disk)
+                                                                 --ascii: frames from +-| (automatic when redirected)
           xpplens update [--install]                             check GitHub for a newer release; --install downloads,
                                                                  verifies (SHA-256) and installs it, keeping settings and index
           xpplens stats [--days 7] [--top 10]                   tokens, time and empty answers of MCP calls
@@ -263,10 +292,12 @@ if (cmd is "help" or "-h" or "--help")
           xpplens ext <name>
           xpplens scaffold coc|event|delegate|pre|post <object> <member> [--element ds|ds.field|control] [--class name] [--type t]
           xpplens build-errors [--model m] [--severity error|warning|all] [--limit n]
+                          (newest of the model build and the project build, with objects not compiled since)
           xpplens security <menuitem|form|privilege|duty|role> [--type t] [--limit n]
           xpplens join <fromTable> <toTable> [--hops n] [--limit n]
           xpplens entity <entity|publicName|table> [--sections list] [--limit n]
-          xpplens changed [--since 24h|3d|2026-10-01] [--model m] [--type t] [--limit n]
+          xpplens changed [--since 24h|3d|2026-10-01|build] [--model m] [--type t] [--limit n]
+                          (--since build: objects changed after the package's last build, i.e. not compiled yet)
           xpplens grep <regex> [--model m] [--type t] [--object o] [--standard] [--limit n]
           xpplens label <@id|text> [--lang l] [--limit n]
           xpplens mcp                                           MCP server over stdio
@@ -315,7 +346,7 @@ try
             {
                 var cs = service.SyncCompiledPackages(force, Log.Info);
                 Log.Info($"compiled packages: {cs} ({sw.Elapsed:hh\\:mm\\:ss})");
-                Console.WriteLine(service.StatusText());
+                PrintTables(style => service.StatusText(style: style), ascii: false);
                 break;
             }
             if (!stdOnly)
@@ -328,14 +359,14 @@ try
                 var st = service.SyncStandardTier(force, Progress);
                 Log.Info($"standard tier: {st} ({sw.Elapsed:hh\\:mm\\:ss})");
             }
-            Console.WriteLine(service.StatusText());
+            PrintTables(style => service.StatusText(style: style), ascii: false);
             break;
         }
         case "status":
         {
-            bool counts = Flag("counts");
+            bool counts = Flag("counts"), ascii = Flag("ascii");
             service.SyncCatalog();
-            Console.WriteLine(service.StatusText(counts));
+            PrintTables(style => service.StatusText(counts, style), ascii);
             break;
         }
         default:

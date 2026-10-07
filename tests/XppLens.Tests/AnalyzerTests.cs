@@ -242,4 +242,27 @@ public class HelperTests
             Directory.Delete(dir, true);
         }
     }
+
+    [Fact]
+    public void Text_tables_in_three_styles()
+    {
+        Assert.Equal("188 835", TextTable.Num(188835));
+        Assert.Equal("24", TextTable.Num(24));
+        var t = new TextTable("tier", "files").Right(1).Row("full", "6 128").Row("standard", "188 835");
+
+        var box = t.Render(TableStyle.Box).Replace("\r", "").Split('\n');
+        Assert.Equal("┌──────────┬─────────┐", box[0]);
+        Assert.Equal("│ tier     │   files │", box[1]);
+        Assert.Equal("│ full     │   6 128 │", box[3]);
+        Assert.Equal("└──────────┴─────────┘", box[5]);
+
+        var ascii = t.Render(TableStyle.Ascii).Replace("\r", "").Split('\n');
+        Assert.Equal("+----------+---------+", ascii[0]);
+        Assert.Equal("| standard | 188 835 |", ascii[4]);
+
+        var md = t.Render(TableStyle.Markdown).Replace("\r", "").Split('\n');
+        Assert.Equal("| tier | files |", md[0]);
+        Assert.Equal("|---|---:|", md[1]);
+        Assert.Equal("| full | 6 128 |", md[2]);
+    }
 }

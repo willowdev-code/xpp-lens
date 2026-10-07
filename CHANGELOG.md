@@ -3,6 +3,26 @@
 All notable changes to xpp-lens (called xpp-graft up to 1.2.0). Versions follow `<Version>` in
 `src/XppLens/XppLens.csproj`; release tags are `vX.Y.Z`.
 
+## 1.2.4 — 2026-10-07
+
+### Added
+- `xpp_build_errors` reads the result of a Visual Studio project build (`BuildProjectResult.xml`) next to that of the
+  model build. The header shows both build times and the time of the model DLL. Diagnostics of the newer build come
+  first and replace those of the model build for the same objects.
+- `xpp_build_errors` lists the objects changed after the newest build, which are not compiled yet. After a project
+  build it also lists the objects changed between the model build and the project build, which are compiled only if
+  they are in the project. This answers "did my build take everything?" in one call.
+- `xpp_changed since=build` (`xpplens changed --since build`): per package, the objects changed after its last build.
+
+### Changed
+- `xpplens status` / `xpp_status` start with the xpp-lens version (and an available update) and show the index tiers
+  and counts as tables. The console gets box-drawing frames; output redirected to a file or a pipe, or `--ascii`, gets
+  `+-|` frames; `xpp_status` returns Markdown tables. Numbers are grouped by thousands; long model lists come last.
+
+### Fixed
+- After a project build, `xpp_build_errors` showed the older model build as the latest result. Objects changed after
+  the build were marked only when they had a diagnostic; with a clean build they were not mentioned at all.
+
 ## 1.2.3 — 2026-10-07
 
 ### Fixed

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Diagnostics
+  GenerationTime="2025-01-01T00:00:00.0000000+00:00">
+  <Items>
+    <Diagnostic>
+      <DiagnosticType>Compile</DiagnosticType>
+      <Severity>Warning</Severity>
+      <Path>dynamics://Class/ContosoEventHandlers</Path>
+      <ElementType>Class</ElementType>
+      <Moniker>EventHandlerInClassExtension</Moniker>
+      <Line>3</Line>
+      <Column>5</Column>
+      <EndLine>3</EndLine>
+      <EndColumn>40</EndColumn>
+      <Message>Sample project build warning.</Message>
+    </Diagnostic>
+  </Items>
+  <Aliases />
+</Diagnostics>

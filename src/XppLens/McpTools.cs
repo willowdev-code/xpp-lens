@@ -18,11 +18,11 @@ public static class McpTools
         - xpp_refs: every use of a class, table, field, EDT, enum, menu item or label (@File:Id).
         - xpp_extensions: CoC classes, table/form extensions, event handlers, derived classes of an object.
         - xpp_scaffold: ready CoC wrapper / event handler / delegate subscriber with the exact signature.
-        - xpp_build_errors: errors of the last Visual Studio build mapped to file lines.
+        - xpp_build_errors: errors of the last Visual Studio build (model or project) mapped to file lines, plus objects not compiled since.
         - xpp_security: menu item → privileges → duties → roles (and back).
         - xpp_join: relation path between two tables as a ready X++ join.
         - xpp_entity: data entity (data sources, field mapping, keys, staging) or the entities exposing a table.
-        - xpp_changed: objects changed on disk since a time (after Get Latest / own edits).
+        - xpp_changed: objects changed on disk since a time (after Get Latest / own edits) or since=build (not compiled yet).
         - xpp_grep: regex over X++ method bodies. xpp_label: resolve or search labels.
         Custom models have full code references; Microsoft models have objects, signatures, extensions, handlers and calls.
         The index follows the files on disk, so results reflect Get Latest / local edits.
@@ -134,7 +134,7 @@ public static class McpTools
         => Run("xpp_scaffold", new { kind, objectName, member, element, className, type }, () => q.Scaffold(kind, objectName, member, element, className, type));
 
     [McpServerTool(Name = "xpp_build_errors", ReadOnly = true)]
-    [Description("Errors (or warnings) of the last X++ build in Visual Studio, read from each package's BuildModelResult.xml and mapped to the XML file line of the method; flags files changed after that build.")]
+    [Description("Errors (or warnings) of the last X++ build in Visual Studio — the newer of the model build (BuildModelResult.xml) and the project build (BuildProjectResult.xml), with the model DLL time — mapped to the XML file line of the method. Lists objects changed after the newest build (not compiled yet) and marks diagnostics of objects changed after their build. Answers 'did my build take everything?'.")]
     public static string BuildErrors(Queries q,
         [Description("Model or package filter (wildcards); default: your custom models")] string? model = null,
         [Description("error (default) | warning (errors + warnings) | all")] string? severity = null,
@@ -167,9 +167,9 @@ public static class McpTools
         => Run("xpp_entity", new { name, sections, limit }, () => q.Entity(name, sections, limit));
 
     [McpServerTool(Name = "xpp_changed", ReadOnly = true)]
-    [Description("Objects whose XML changed on disk since a time — e.g. what a Get Latest brought in, or your own recent edits. Grouped counts per model plus the newest objects.")]
+    [Description("Objects whose XML changed on disk since a time — e.g. what a Get Latest brought in, or your own recent edits. Grouped counts per model plus the newest objects. since=build: per package, objects changed after its last Visual Studio build (model or project build, or DLL) — i.e. not compiled yet.")]
     public static string Changed(Queries q,
-        [Description("24h (default), 3d, 90m, 2026-10-01 or '2026-10-01 14:00'")] string? since = null,
+        [Description("24h (default), 3d, 90m, 2026-10-01, '2026-10-01 14:00', or build")] string? since = null,
         [Description("Model or package filter (wildcards)")] string? model = null,
         [Description("Object type filter")] string? type = null,
         [Description("Max objects listed (default 100)")] int limit = 100)
@@ -195,7 +195,7 @@ public static class McpTools
         => Run("xpp_label", new { query, lang, limit }, () => q.Label(query, lang, limit));
 
     [McpServerTool(Name = "xpp_status", ReadOnly = true)]
-    [Description("Index status: indexed models per tier, counts, last refresh, background standard-tier indexing.")]
+    [Description("xpp-lens version (and available update), index tiers as a table (models, files, last indexed, state), counts, last refresh, background standard-tier indexing.")]
     public static string Status(IndexService svc,
         [Description("Also count all references and labels (can take tens of seconds right after a restart)")] bool counts = false)
         => Run("xpp_status", new { counts }, () => svc.StatusText(counts));

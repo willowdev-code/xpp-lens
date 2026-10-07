@@ -11,7 +11,10 @@ public sealed partial class Queries
 
     internal sealed record Diagnostic(string Severity, string Path, string Message, int Line, int Column, string? Moniker);
 
-    /// <summary>Diagnostics from a package's BuildModelResult.xml (written by the X++ build in Visual Studio).</summary>
+    /// <summary>
+    /// Diagnostics from a package's BuildModelResult.xml (build of the whole model) or BuildProjectResult.xml (build of
+    /// a Visual Studio project) — both written by the X++ build in the package folder, in the same format.
+    /// </summary>
     internal static (DateTime? Generated, List<Diagnostic> Items) ReadBuildResult(string file)
     {
         var doc = XDocument.Load(file);
@@ -26,6 +29,74 @@ public sealed partial class Queries
             items.Add(new Diagnostic(V("Severity"), V("Path"), V("Message").Trim(), line, col, V("Moniker") is { Length: > 0 } m ? m : null));
         }
         return (generated, items);
+    }
+
+    internal sealed record BuildResult(string Kind, DateTime Time, List<Diagnostic> Items);
+
+    /// <summary>What Visual Studio left in a package folder: the model and project build results and the model DLL.</summary>
+    internal sealed record PackageBuild(string Package, BuildResult? Model, BuildResult? Project, DateTime? Dll, List<string> Errors)
+    {
+        /// <summary>The newest compile of the package — files changed after it are not compiled yet.</summary>
+        public DateTime? Last => new[] { Model?.Time, Project?.Time, Dll }.Max();
+
+        public string LastKind => Last == Project?.Time ? "project build" : Last == Model?.Time ? "model build" : "DLL";
+
+        /// <summary>Results to show, newest first. A model build after the project build compiled the project again.</summary>
+        public List<BuildResult> Current =>
+            Project != null && (Model == null || Project.Time > Model.Time)
+                ? new[] { Project, Model }.OfType<BuildResult>().ToList()
+                : new[] { Model }.OfType<BuildResult>().ToList();
+    }
+
+    internal static PackageBuild ReadPackageBuild(string packageDir, string package)
+    {
+        var errors = new List<string>();
+        BuildResult? Load(string kind, string fileName)
+        {
+            var file = Path.Combine(packageDir, fileName);
+            if (!File.Exists(file)) return null;
+            try
+            {
+                var (generated, items) = ReadBuildResult(file);
+                return new BuildResult(kind, generated ?? File.GetLastWriteTimeUtc(file), items);
+            }
+            catch (Exception ex)
+            {
+                errors.Add($"cannot read {file}: {ex.Message}");
+                return null;
+            }
+        }
+
+        DateTime? dll = null;
+        var bin = Path.Combine(packageDir, "bin");
+        if (Directory.Exists(bin))
+            foreach (var f in Directory.EnumerateFiles(bin, "Dynamics.AX.*.dll"))
+                if (File.GetLastWriteTimeUtc(f) is var t && (dll == null || t > dll)) dll = t;
+        return new PackageBuild(package, Load("model build", "BuildModelResult.xml"), Load("project build", "BuildProjectResult.xml"), dll, errors);
+    }
+
+    /// <summary>Indexed objects of a package whose file changed after <paramref name="after"/>, newest first.</summary>
+    static (List<string> Lines, long Total) ChangedAfter(Store s, string package, DateTime after, string? typePattern, int limit)
+    {
+        var where = $"md.package = $p AND md.tier >= 0 AND f.mtime > $t {(typePattern != null ? "AND o.type LIKE $tp" : "")}";
+        var args = new (string, object?)[] { ("$p", package), ("$t", after.Ticks), ("$tp", typePattern), ("$limit", limit) };
+        const string from = "FROM files f JOIN objects o ON o.file_id = f.id JOIN models md ON md.id = f.model_id";
+        var total = Convert.ToInt64(s.Scalar($"SELECT COUNT(*) {from} WHERE {where}", args));
+        var lines = total == 0 ? [] : s.Query($"SELECT f.mtime, o.type, o.name {from} WHERE {where} ORDER BY f.mtime DESC LIMIT $limit", args)
+            .Select(r => $"{new DateTime(r.GetInt64(0), DateTimeKind.Utc).ToLocalTime():MM-dd HH:mm} {r.GetString(1)} {r.GetString(2)}")
+            .ToList();
+        return (lines, total);
+    }
+
+    static string When(DateTime utc) => utc.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
+
+    /// <summary>Packages of the full tier, or those matching <paramref name="model"/> (model or package name, wildcards).</summary>
+    List<string> BuildPackages(string? model)
+    {
+        var rx = string.IsNullOrWhiteSpace(model) ? null : Wildcard(model.Trim());
+        return svc.Models
+            .Where(m => rx == null ? m.Full : rx.IsMatch(m.Name) || rx.IsMatch(m.Package))
+            .Select(m => m.Package).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToList();
     }
 
     static readonly Dictionary<string, string> DynamicsTypes = new(StringComparer.OrdinalIgnoreCase)
@@ -114,10 +185,7 @@ public sealed partial class Queries
             _ => sv == "Error",
         };
 
-        var rx = string.IsNullOrWhiteSpace(model) ? null : Wildcard(model.Trim());
-        var packages = svc.Models
-            .Where(m => rx == null ? m.Full : rx.IsMatch(m.Name) || rx.IsMatch(m.Package))
-            .Select(m => m.Package).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToList();
+        var packages = BuildPackages(model);
         if (packages.Count == 0) return $"no build results: no indexed package matches '{model}'.";
 
         var sb = new StringBuilder();
@@ -135,7 +203,7 @@ public sealed partial class Queries
             var obj = ObjectRows(s, t.Name, t.Type).FirstOrDefault();
             if (obj == null || obj.Compiled) return label + (d.Line > 0 ? $" (code line {d.Line}:{d.Column})" : "");
             var changed = File.Exists(obj.Path) && File.GetLastWriteTimeUtc(obj.Path) > built
-                ? "  [file changed after this build - the line may have moved]" : "";
+                ? "  [file changed after this build - may be fixed already, the line may have moved]" : "";
             if (d.Line <= 0 || t.Method == null) return $"{label} → {obj.Path}{changed}";
 
             if (t.Owner == null)
@@ -155,34 +223,71 @@ public sealed partial class Queries
                 ("$id", obj.Id), ("$m", t.Method), ("$o", t.Owner));
             return $"{label} → {obj.Path}{(start != null ? $" (method starts at line {start}; compiler line {d.Line}:{d.Column} counts through the whole form code)" : "")}{changed}";
         }
+        static string Counts(List<Diagnostic> items)
+        {
+            var c = items.GroupBy(d => d.Severity)
+                .Select(g => $"{g.Count()} {g.Key.ToLowerInvariant()}{(g.Count() > 1 && g.Key is "Error" or "Warning" ? "s" : "")}").ToList();
+            return c.Count == 0 ? "clean" : string.Join(", ", c);
+        }
+
         foreach (var pkg in packages)
         {
-            var file = Path.Combine(svc.Cfg.PackagesDir, pkg, "BuildModelResult.xml");
-            if (!File.Exists(file)) { missing.Add(pkg); continue; }
-            (DateTime? Generated, List<Diagnostic> Items) res;
-            try
+            var b = ReadPackageBuild(Path.Combine(svc.Cfg.PackagesDir, pkg), pkg);
+            foreach (var e in b.Errors) sb.AppendLine($"{pkg}: {e}");
+            var results = b.Current;
+            if (results.Count == 0)
             {
-                res = ReadBuildResult(file);
-            }
-            catch (Exception ex)
-            {
-                sb.AppendLine($"{pkg}: cannot read {file}: {ex.Message}");
+                if (b.Errors.Count == 0) missing.Add(pkg);
                 continue;
             }
-            var built = res.Generated ?? File.GetLastWriteTimeUtc(file);
-            var counts = res.Items.GroupBy(d => d.Severity).Select(g => $"{g.Count()} {g.Key.ToLowerInvariant()}").ToList();
-            sb.AppendLine($"{pkg} — built {built.ToLocalTime():yyyy-MM-dd HH:mm}: {(counts.Count == 0 ? "clean" : string.Join(", ", counts))}");
+            sb.AppendLine($"{pkg} — {string.Join(" | ", results.Select(r => $"{r.Kind} {When(r.Time)}: {Counts(r.Items)}"))}"
+                          + (b.Dll is { } dll ? $" | DLL {When(dll)}" : ""));
 
-            foreach (var d in res.Items.Where(d => Want(d.Severity)))
+            // Answers "did my build take everything?": object files saved after the newest compile.
+            var last = b.Last!.Value;
+            var (pending, total) = ChangedAfter(s, pkg, last, null, 15);
+            if (total > 0)
             {
-                if (shown++ >= limit) continue;
-                sb.AppendLine($"  {d.Severity} {Locate(d, built)}");
-                sb.AppendLine($"      {CodeAnalyzer.Collapse(d.Message, 400)}{(d.Moniker != null ? $" ({d.Moniker})" : "")}");
+                sb.AppendLine($"  not compiled yet — {total} object(s) changed after the {b.LastKind} ({When(last)}):");
+                foreach (var p in pending) sb.AppendLine("    " + p);
+                if (total > pending.Count) sb.AppendLine($"    … {total - pending.Count} more (xpp_changed since=build model={pkg})");
+            }
+            if (results.Count > 1)
+            {
+                // A project build compiles only the project's objects; what changed before it may not have been in the project.
+                var (betweenLines, between) = ChangedAfter(s, pkg, b.Model!.Time, null, (int)Math.Min(total + 10, 1000));
+                betweenLines = betweenLines.Skip((int)total).ToList();
+                between -= total;
+                if (between > 0)
+                {
+                    sb.AppendLine($"  {between} object(s) changed between the model build and the project build — compiled only if they are in the project:");
+                    foreach (var p in betweenLines) sb.AppendLine("    " + p);
+                    if (between > betweenLines.Count) sb.AppendLine($"    … {between - betweenLines.Count} more");
+                }
+            }
+
+            // Diagnostics of the project build replace those of the model build for the same objects.
+            var newer = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var r in results)
+            {
+                var items = r.Items.Where(d => !newer.Contains(ParseDiagnosticPath(d.Path).Name ?? d.Path)).ToList();
+                var wanted = items.Where(d => Want(d.Severity)).ToList();
+                if (results.Count > 1 && wanted.Count > 0) sb.AppendLine($"  {r.Kind}:");
+                foreach (var d in wanted)
+                {
+                    if (shown++ >= limit) continue;
+                    sb.AppendLine($"  {d.Severity} {Locate(d, r.Time)}");
+                    sb.AppendLine($"      {CodeAnalyzer.Collapse(d.Message, 400)}{(d.Moniker != null ? $" ({d.Moniker})" : "")}");
+                }
+                var replaced = r.Items.Count(d => Want(d.Severity)) - wanted.Count;
+                if (replaced > 0)
+                    sb.AppendLine($"  ({replaced} diagnostic(s) of objects rebuilt by the project build left out)");
+                foreach (var d in r.Items) newer.Add(ParseDiagnosticPath(d.Path).Name ?? d.Path);
             }
         }
         if (shown > limit) sb.AppendLine($"… {shown - limit} more (raise limit or filter by model)");
         if (sev == "error" && shown == 0 && sb.Length > 0) sb.AppendLine("no errors (pass severity=warning or all to list warnings)");
-        if (missing.Count > 0) sb.AppendLine($"no BuildModelResult.xml (never built here): {string.Join(", ", missing)}");
+        if (missing.Count > 0) sb.AppendLine($"no build results (never built here): {string.Join(", ", missing)}");
         if (sb.Length == 0) sb.Append("no build results found.");
         sb.AppendLine("(→ file:line:column in the object's XML, translated from the compiler's numbering through the object's code)");
         return Finish(sb);
@@ -214,6 +319,8 @@ public sealed partial class Queries
     public string Changed(string? since, string? model, string? type, int limit) => svc.Read(s =>
     {
         limit = Math.Clamp(limit, 1, 1000);
+        if (since?.Trim().ToLowerInvariant() is "build" or "lastbuild" or "last build" or "last-build")
+            return ChangedSinceBuild(s, model, type, limit);
         var from = ParseSince(since, DateTime.UtcNow);
         if (from == null) return $"cannot read since='{since}' — use e.g. 24h, 3d, 2026-10-01 or '2026-10-01 14:00'.";
         var tp = TypePattern(type);
@@ -247,6 +354,41 @@ public sealed partial class Queries
         sb.AppendLine("(by file time on disk — a Get Latest shows up here too; deleted objects are not listed)");
         return Finish(sb);
     });
+
+    /// <summary>Per package: objects changed after its newest compile (model build, project build or DLL) — not compiled yet.</summary>
+    string ChangedSinceBuild(Store s, string? model, string? type, int limit)
+    {
+        var packages = BuildPackages(model);
+        if (packages.Count == 0) return $"no indexed package matches '{model}'.";
+        var tp = TypePattern(type);
+        var sb = new StringBuilder();
+        var never = new List<string>();
+        var clean = new List<string>();
+        foreach (var pkg in packages)
+        {
+            var b = ReadPackageBuild(Path.Combine(svc.Cfg.PackagesDir, pkg), pkg);
+            if (b.Last is not { } last)
+            {
+                never.Add(pkg);
+                continue;
+            }
+            var (lines, total) = ChangedAfter(s, pkg, last, tp, limit);
+            if (total == 0)
+            {
+                clean.Add($"{pkg} ({b.LastKind} {When(last)})");
+                continue;
+            }
+            sb.AppendLine($"{pkg} — {total} object(s) changed after the {b.LastKind} {When(last)}:");
+            foreach (var l in lines) sb.AppendLine("  " + l);
+            if (total > lines.Count) sb.AppendLine($"  … {total - lines.Count} more (raise limit)");
+        }
+        if (sb.Length == 0 && clean.Count > 0) sb.AppendLine("everything is compiled: no object changed after the last build.");
+        if (clean.Count > 0)
+            sb.AppendLine($"compiled (nothing changed since): {string.Join(", ", clean.Count <= 5 ? clean : clean.Select(c => c[..c.IndexOf(" (", StringComparison.Ordinal)]))}");
+        if (never.Count > 0) sb.AppendLine($"never built here: {string.Join(", ", never)}");
+        sb.AppendLine("(by file time on disk against BuildModelResult.xml / BuildProjectResult.xml / bin\\Dynamics.AX.*.dll; a Get Latest after the build shows up too)");
+        return Finish(sb);
+    }
 
     // ---------------------------------------------------------------- security
 

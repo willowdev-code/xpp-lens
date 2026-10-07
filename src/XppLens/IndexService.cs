@@ -333,36 +333,54 @@ public sealed class IndexService : IDisposable
     /// Index overview. Counting all references and labels reads most of the index file — tens of seconds on a cold
     /// disk — so those two counts only come with <paramref name="counts"/>.
     /// </summary>
-    public string StatusText(bool counts = false)
+    public string StatusText(bool counts = false, TableStyle style = TableStyle.Markdown)
     {
         return Read(s =>
         {
             var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"xpp-lens {Updater.Current}{(Updater.PendingNotice() is { } notice ? " — " + notice : "")}");
             sb.AppendLine($"config: {Cfg.SourcePath ?? "(defaults)"}");
+            sb.AppendLine($"index:  {Cfg.IndexPath} ({TextTable.Num(new FileInfo(Cfg.IndexPath).Length / 1048576)} MB + WAL)");
             if (_store.ReadOnly) sb.AppendLine(ReadOnlyNote);
-            sb.AppendLine($"index: {Cfg.IndexPath} ({new FileInfo(Cfg.IndexPath).Length / 1048576} MB + WAL)");
+            sb.AppendLine();
+
+            var tiers = new TextTable("tier", "models", "files", "last indexed", "state").Right(1, 2);
             foreach (var tier in new[] { 1, 0, -1 })
             {
                 var q = s.Query("""
                     SELECT COUNT(DISTINCT md.id), COUNT(f.id), MAX(md.indexed_utc)
                     FROM models md LEFT JOIN files f ON f.model_id = md.id WHERE md.tier = $t
-                    """, ("$t", tier)).Select(r => (r.GetInt64(0), r.GetInt64(1), r.IsDBNull(2) ? "-" : r.GetString(2))).First();
-                var title = tier switch { 1 => "full tier", 0 => "standard tier", _ => "compiled packages" };
-                var unit = tier == -1 ? "objects" : "files";
-                sb.AppendLine($"{title}: {q.Item1} models, {q.Item2} {unit}, last indexed {q.Item3}");
-                if (tier == 0 && q.Item1 > 0 && q.Item2 == 0)
-                    sb.AppendLine(Cfg.IndexStandard
-                        ? "  standard models are listed but not indexed yet (first build not run or interrupted): run 'xpplens build --std-only'"
-                        : "  standard models are listed but NOT indexed (indexStandard = false): run 'xpplens build --std-only' to index them");
+                    """, ("$t", tier)).Select(r => (Models: r.GetInt64(0), Files: r.GetInt64(1), Last: r.IsDBNull(2) ? null : r.GetString(2))).First();
+                var title = tier switch { 1 => "full (custom code)", 0 => "standard (Microsoft)", _ => "compiled (no source)" };
+                var state = tier switch
+                {
+                    0 when !Cfg.IndexStandard && q.Files == 0 => "off — 'xpplens build --std-only'",
+                    0 when q.Models > 0 && q.Files == 0 => "not indexed — 'xpplens build --std-only'",
+                    _ when q.Models == 0 => "none",
+                    _ => "ok",
+                };
+                tiers.Row(title, TextTable.Num(q.Models), TextTable.Num(q.Files) + (tier == -1 ? " obj" : ""), LocalTime(q.Last), state);
             }
-            foreach (var t in counts ? ["objects", "methods", "members", "sources", "refs", "labels"] : new[] { "objects", "methods", "members", "sources" })
-                sb.AppendLine($"  {t}: {s.Scalar($"SELECT COUNT(*) FROM {t}")}");
-            if (!counts) sb.AppendLine("  refs, labels: not counted (slow on a cold disk) — 'xpplens status --counts'");
-            var full = string.Join(", ", Models.Where(m => m.Full).Select(m => m.Package == m.Name ? m.Name : $"{m.Package}/{m.Name}"));
-            sb.AppendLine($"full-tier models: {full}");
+            sb.Append(tiers.Render(style));
+            sb.AppendLine();
+
+            var names = counts ? new[] { "objects", "methods", "members", "sources", "refs", "labels" } : ["objects", "methods", "members", "sources"];
+            var sizes = names.Select(t => TextTable.Num(Convert.ToInt64(s.Scalar($"SELECT COUNT(*) FROM {t}")))).ToList();
+            if (!counts) { names = [.. names, "refs", "labels"]; sizes.AddRange(["-", "-"]); }
+            sb.Append(new TextTable(names).Right(Enumerable.Range(0, names.Length).ToArray()).Row([.. sizes]).Render(style));
+            if (!counts) sb.AppendLine("refs and labels are not counted (slow on a cold disk) — 'xpplens status --counts'");
+            sb.AppendLine();
+
+            sb.AppendLine($"watchers: {_watchers.Count}, last full-tier scan: {(_lastScanUtc == DateTime.MinValue ? "never" : _lastScanUtc.ToLocalTime().ToString("HH:mm:ss"))}, " +
+                          $"last change: {(_lastChangeUtc == DateTime.MinValue ? "-" : $"{_lastChangeUtc.ToLocalTime():HH:mm:ss} ({_lastChangeCount} files)")}");
+            sb.AppendLine($"background: {BackgroundStatus}");
+            sb.AppendLine();
+
+            var full = Models.Where(m => m.Full).Select(m => m.Package == m.Name ? m.Name : $"{m.Package}/{m.Name}").ToList();
+            sb.AppendLine($"full-tier models ({full.Count}): {string.Join(", ", full)}");
             var compiled = Models.Where(m => m.Binary).Select(m => m.Package).ToList();
             if (compiled.Count > 0)
-                sb.AppendLine($"compiled packages (from .xref / bin\\*.md / Resources, no source): {string.Join(", ", compiled)}");
+                sb.AppendLine($"compiled packages ({compiled.Count}, from .xref / bin\\*.md / Resources): {string.Join(", ", compiled)}");
             try
             {
                 var missing = Catalog.Unindexed(Cfg, Models);
@@ -373,11 +391,14 @@ public sealed class IndexService : IDisposable
             {
                 sb.AppendLine($"cannot list unindexed packages: {ex.Message}");
             }
-            sb.AppendLine($"watchers: {_watchers.Count}, last full-tier scan: {(_lastScanUtc == DateTime.MinValue ? "never" : _lastScanUtc.ToLocalTime().ToString("HH:mm:ss"))}, " +
-                          $"last change: {(_lastChangeUtc == DateTime.MinValue ? "-" : $"{_lastChangeUtc.ToLocalTime():HH:mm:ss} ({_lastChangeCount} files)")}");
-            sb.AppendLine($"background: {BackgroundStatus}");
-            if (Updater.PendingNotice() is { } notice) sb.AppendLine(notice);
             return sb.ToString();
         });
     }
+
+    /// <summary>"2026-10-07T09:36:52Z" (as stored) → "2026-10-07 11:36" local; "-" when empty.</summary>
+    static string LocalTime(string? utc) =>
+        DateTime.TryParse(utc, System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal, out var t)
+            ? t.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+            : utc ?? "-";
 }
