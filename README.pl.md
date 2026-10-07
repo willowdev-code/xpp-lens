@@ -68,7 +68,7 @@ xpplens config --packages-dir K:\AosService\PackagesLocalDirectory
 xpplens config --standard-code false             # bez wywołań z kodu Microsoftu (mniejszy indeks)
 xpplens config --usage-log false                 # nie zapisuj wywołań MCP dla 'xpplens stats'
 xpplens detect [--set]                           # wykryj PackagesLocalDirectory
-$1
+xpplens build                                    # zastosuj zmiany
 xpplens build --std-only                         # dołóż standard Microsoftu do instalacji z -NoStandard
 ```
 
@@ -197,7 +197,7 @@ C:\Dev\xpp-lens\
   tests\XppLens.Tests\     testy xUnit + przykładowe XML-e z AOT (Fixtures)
   build.ps1                 kompilacja; -Deploy podmienia binaria w instalacji
   pack.ps1                  pakiet ZIP do instalacji gdzie indziej
-$1
+  install.ps1 uninstall.ps1 README.md README.pl.md CHANGELOG.md LICENSE
   release-notes.ps1         opis wydania jednej wersji z CHANGELOG.md (używa go workflow wydań)
   .github\                  workflowy CI i wydań, formularze zgłoszeń
   build\  dist\             wyniki (nie trzymaj tu niczego własnego)
@@ -241,7 +241,7 @@ dotnet test --logger "console;verbosity=detailed"        # każdy test i szczeg�
 | `AnalyzerTests.cs` | lekser, nagłówki metod, rozwiązane wywołania, wywołania łańcuchowe (łańcuchy `ret:`), nierozwiązani odbiorcy, sygnatury do szkieletów |
 | `AnalyzerTests.cs` → `HelperTests` | fragmenty metod, informacje o relacjach, parsowanie `since`, ścieżki z wyników builda, listy zbiorcze, dziennik użycia i raport |
 | `QueryTests.cs` | każde narzędzie od początku do końca na indeksie z przykładów: find (podkreślnik, nazwy z kropką, wiele zapytań), object, method (fragment, wiele metod), callers (własne, łańcuchowe, standard), refs, callees, extensions, scaffold, security, join, entity, changed, build errors, etykiety |
-$1
+| `IndexFixture.cs` | buduje tymczasowy indeks raz dla wszystkich `QueryTests` |
 | `MigrationTests.cs` | przejęcie instalacji xpp-graft (przeniesienie, inna lokalizacja, plik zablokowany, cel zajęty, drugie uruchomienie) i `xpplens update` (wersje, JSON wydania, SHA-256, komunikat o aktualizacji) |
 
 Dodanie testu: włóż potrzebny XML do `Fixtures` (nazwy neutralne — `Demo*`, `Contoso*`), potem dopisz `[Fact]`
@@ -273,7 +273,7 @@ Tagi wydań są chronione: opublikowanej wersji nie da się zmienić — poprawk
 | nowa tabela lub indeks w bazie | `Store.cs` — `EnsureExtras` dla zmian w miejscu, `SchemaVersion` tylko gdy przebudowa jest nieunikniona |
 | odświeżanie, obserwator, poziomy modeli | `IndexService.cs`, `Indexer.cs`, `Catalog.cs` |
 | pakiety bez XML (`.xref`, `bin\*.md`, zasoby z etykietami) | `BinaryPackage.cs` |
-$1
+| dziennik użycia i `stats` | `Usage.cs` |
 | `xpplens update`, przejęcie xpp-graft | `Updater.cs`, `Migration.cs` |
 | automatyczne wydania | `.github\workflows\release.yml`, `release-notes.ps1`, `pack.ps1` |
 | polecenia CLI, konfiguracja, rejestracja w Claude | `Program.cs`, `Config.cs`, `Detect.cs` |
@@ -310,4 +310,6 @@ Błędy i pomysły: załóż issue (formularz pyta o wersję i wykonane poleceni
 - Pakiety skompilowane: brak kodu źródłowego; skład grup pól i właściwości obiektów nie są odtwarzane
   (format `bin\*.md` jest czytany tylko w nagłówku), a odwołania obejmują tylko to, co zapisał kompilator.
 - `xpp_join` idzie tylko po relacjach tabel (nie po relacjach EDT); `xpp_changed` nie pokazuje usuniętych obiektów.
+- `xpp_build_errors` przelicza linie kompilatora na linie pliku XML dla metod klas, tabel i formularzy; dla metod źródeł
+  danych i kontrolek formularza pokazuje, gdzie metoda się zaczyna.
 - Windows i x64 (pakiet samodzielny); indeks nie jest przenośny między maszynami — buduje się go lokalnie.

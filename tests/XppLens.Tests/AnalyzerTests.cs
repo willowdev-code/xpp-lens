@@ -166,11 +166,35 @@ public class HelperTests
     }
 
     [Fact]
-    public void Dynamics_paths_map_to_objects_and_methods()
+    public void Diagnostic_paths_map_to_objects_methods_and_elements()
     {
-        Assert.Equal(("AxClass", "Foo", null, "bar"), Queries.ParseDynamicsPath("dynamics://Class/Foo/Method/bar"));
-        Assert.Equal(("AxForm", "Foo", "DataSource:Bar", "init"), Queries.ParseDynamicsPath("dynamics://Form/Foo/DataSource/Bar/Method/init"));
-        Assert.Equal((null, null, null, null), Queries.ParseDynamicsPath("C:\\file.xml"));
+        Assert.Equal(new Queries.DiagTarget("AxClass", "Foo", null, "bar", null), Queries.ParseDiagnosticPath("dynamics://Class/Foo/Method/bar"));
+        Assert.Equal(new Queries.DiagTarget("AxForm", "Foo", "DataSource:Bar", "init", "Bar"),
+            Queries.ParseDiagnosticPath("dynamics://Form/Foo/DataSource/Bar/Method/init"));
+        Assert.Equal(new Queries.DiagTarget("AxForm", "Foo", "DataSource:Bar/Field:Qty", "validate", "Qty"),
+            Queries.ParseDiagnosticPath("dynamics://Form/Foo/DataSource/Bar/DataField/Qty/Method/validate"));
+        Assert.Equal(new Queries.DiagTarget("AxForm", "Foo", "Control:OkButton", "clicked", "OkButton"),
+            Queries.ParseDiagnosticPath("dynamics://Form/Foo/FormDesign/AxFormDesign/FormButtonGroupControl/Group/FormButtonControl/OkButton/Method/clicked"));
+        Assert.Equal(new Queries.DiagTarget("AxFormExtension", "Foo.Contoso", null, null, "Design/Controls/Tab/Page"),
+            Queries.ParseDiagnosticPath("AxFormExtension/Foo.Contoso/Design/Controls/Tab/Page"));
+        Assert.Equal(new Queries.DiagTarget("AxView", "Foo", null, null, null), Queries.ParseDiagnosticPath("dynamics://View/Foo"));
+        Assert.Null(Queries.ParseDiagnosticPath(@"C:\file.xml").Name);
+    }
+
+    [Fact]
+    public void Compiler_lines_count_through_declaration_and_methods()
+    {
+        var file = Path.Combine(AppContext.BaseDirectory, "Fixtures", "PackagesLocalDirectory", "ContosoCore", "ContosoCore", "AxClass", "ContosoHelper.xml");
+        var po = XmlObjectParser.Parse(file, ParseMode.Render);
+        // Declaration: file lines 6-8 ("public class ContosoHelper", "{", member); the closing brace is not counted.
+        Assert.Equal((6, "classDeclaration"), Queries.MapCodeLine(po, 1));
+        Assert.Equal((8, "classDeclaration"), Queries.MapCodeLine(po, 3));
+        // calc_Total: 5 lines (signature, {, return, }, blank) from file line 15.
+        Assert.Equal((15, "calc_Total"), Queries.MapCodeLine(po, 4));
+        Assert.Equal((17, "calc_Total"), Queries.MapCodeLine(po, 6));
+        // calcXTotal follows: the 9th line of the code is its signature in file line 25.
+        Assert.Equal((25, "calcXTotal"), Queries.MapCodeLine(po, 9));
+        Assert.Null(Queries.MapCodeLine(po, 500));
     }
 
     [Fact]

@@ -229,8 +229,10 @@ public class QueryTests(IndexFixture fx)
         var res = Q.BuildErrors(null, null, 50);
         Assert.Contains("ContosoCore — built", res);
         Assert.Contains("1 error, 1 warning", res);
-        Assert.Contains("Error AxClass ContosoInvoiceService.run L8:9 → ", res);
-        Assert.Contains("[file changed after this build]", res);
+        // Compiler line 8: declaration has 2 lines, run starts at file line 14 → its 6th line is file line 19.
+        Assert.Contains("Error AxClass ContosoInvoiceService.run → ", res);
+        Assert.Contains("ContosoInvoiceService.xml:19:9", res);
+        Assert.Contains("[file changed after this build", res);
         Assert.DoesNotContain("BPUnusedMethod", res);
         Assert.Contains("BPUnusedMethod", Q.BuildErrors(null, "warning", 50));
     }

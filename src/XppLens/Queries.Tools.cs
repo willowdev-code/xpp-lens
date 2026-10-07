@@ -35,22 +35,72 @@ public sealed partial class Queries
         ["TableExtension"] = "AxTableExtension", ["FormExtension"] = "AxFormExtension", ["Report"] = "AxReport",
     };
 
-    /// <summary>"dynamics://Class/Foo/Method/bar" → (AxClass, Foo, owner, bar).</summary>
-    internal static (string? Type, string? Name, string? Owner, string? Method) ParseDynamicsPath(string path)
+    /// <param name="Owner">Owner of a nested method in the index's notation ("DataSource:X", "DataSource:X/Field:Y", "Control:Z").</param>
+    /// <param name="Element">The element a metadata diagnostic is about ("Design/Controls/Tab/Page").</param>
+    internal sealed record DiagTarget(string? Type, string? Name, string? Owner, string? Method, string? Element);
+
+    /// <summary>
+    /// Code diagnostics: "dynamics://Class/Foo/Method/bar", "dynamics://Form/F/DataSource/D/Method/init",
+    /// "dynamics://Form/F/DataSource/D/DataField/A/Method/validate", "dynamics://Form/F/FormDesign/…/FormButtonControl/B/Method/clicked".
+    /// Metadata diagnostics: "AxForm/F/Design/Controls/Tab/Page", "AxFormExtension/F.Ext/Design/…".
+    /// </summary>
+    internal static DiagTarget ParseDiagnosticPath(string path)
     {
         const string prefix = "dynamics://";
-        if (!path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return (null, null, null, null);
-        var p = path[prefix.Length..].Split('/', StringSplitOptions.RemoveEmptyEntries);
-        if (p.Length < 2) return (null, null, null, null);
-        var type = DynamicsTypes.TryGetValue(p[0], out var t) ? t : "Ax" + p[0];
-        string? method = null;
-        var owner = new List<string>();
-        for (int i = 2; i + 1 < p.Length; i += 2)
+        if (path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
         {
-            if (p[i].Equals("Method", StringComparison.OrdinalIgnoreCase)) { method = p[i + 1]; break; }
-            owner.Add($"{p[i]}:{p[i + 1]}");
+            var p = path[prefix.Length..].Split('/', StringSplitOptions.RemoveEmptyEntries);
+            if (p.Length < 2) return new DiagTarget(null, null, null, null, null);
+            var type = DynamicsTypes.TryGetValue(p[0], out var t) ? t : "Ax" + p[0];
+            int mi = p.Length > 2 ? Array.FindIndex(p, 2, x => x.Equals("Method", StringComparison.OrdinalIgnoreCase)) : -1;
+            var method = mi >= 0 && mi + 1 < p.Length ? p[mi + 1] : null;
+            string? owner = null, element = null;
+            if (mi > 3)
+            {
+                var kind = p[mi - 2];
+                element = p[mi - 1];
+                owner = kind.Equals("DataSource", StringComparison.OrdinalIgnoreCase) ? $"DataSource:{element}"
+                    : kind.Equals("DataField", StringComparison.OrdinalIgnoreCase) && mi > 4 ? $"DataSource:{p[mi - 3]}/Field:{element}"
+                    : $"Control:{element}";
+            }
+            else if (mi < 0 && p.Length > 2) element = string.Join("/", p.Skip(2));
+            return new DiagTarget(type, p[1], owner, method, element);
         }
-        return (type, p[1], owner.Count > 0 ? string.Join("/", owner) : null, method);
+        if (path.StartsWith("Ax", StringComparison.Ordinal) && path.Contains('/'))
+        {
+            var p = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            return new DiagTarget(p[0], p[1], null, null, p.Length > 2 ? string.Join("/", p.Skip(2)) : null);
+        }
+        return new DiagTarget(null, null, null, null, null);
+    }
+
+    static (int First, List<string> Lines) BlockLines(ParsedMethod m)
+    {
+        var lines = (m.Source ?? "").Split('\n').Select(l => l.TrimEnd('\r')).ToList();
+        int first = m.StartLine;
+        if (lines.Count > 0 && lines[0].Trim().Length == 0) { lines.RemoveAt(0); first++; }
+        if (lines.Count > 0 && lines[^1].Trim().Length == 0) lines.RemoveAt(lines.Count - 1);
+        return (first, lines);
+    }
+
+    /// <summary>
+    /// The X++ compiler numbers lines through the object's code as the editor shows it: the declaration without its
+    /// closing brace, then every top-level method in file order, each with its trailing blank line. Returns the XML
+    /// file line of compiler line <paramref name="line"/> and the method it falls into.
+    /// </summary>
+    internal static (int FileLine, string Method)? MapCodeLine(ParsedObject po, int line)
+    {
+        if (line <= 0) return null;
+        int offset = 0;
+        foreach (var m in po.Methods.Where(m => m.Owner.Length == 0))
+        {
+            var (first, lines) = BlockLines(m);
+            int count = lines.Count;
+            if (m.IsDeclaration && lines.FindLastIndex(l => l.Trim() == "}") is >= 0 and var close) count = close;
+            if (line <= offset + count) return (first + (line - offset) - 1, m.Name);
+            offset += count;
+        }
+        return null;
     }
 
     public string BuildErrors(string? model, string? severity, int limit) => svc.Read(s =>
@@ -72,7 +122,39 @@ public sealed partial class Queries
 
         var sb = new StringBuilder();
         var missing = new List<string>();
+        var parsed = new Dictionary<string, ParsedObject?>(StringComparer.OrdinalIgnoreCase);
         int shown = 0;
+
+        string Locate(Diagnostic d, DateTime built)
+        {
+            var t = ParseDiagnosticPath(d.Path);
+            if (t.Name == null) return d.Path;
+            var label = $"{t.Type} {t.Name}"
+                        + (t.Method != null ? "." + (t.Owner != null ? t.Owner + "/" : "") + t.Method : "")
+                        + (t.Method == null && t.Element != null ? $" / {t.Element}" : "");
+            var obj = ObjectRows(s, t.Name, t.Type).FirstOrDefault();
+            if (obj == null || obj.Compiled) return label + (d.Line > 0 ? $" (code line {d.Line}:{d.Column})" : "");
+            var changed = File.Exists(obj.Path) && File.GetLastWriteTimeUtc(obj.Path) > built
+                ? "  [file changed after this build - the line may have moved]" : "";
+            if (d.Line <= 0 || t.Method == null) return $"{label} → {obj.Path}{changed}";
+
+            if (t.Owner == null)
+            {
+                if (!parsed.TryGetValue(obj.Path, out var po))
+                {
+                    try { po = XmlObjectParser.Parse(obj.Path, ParseMode.Render); } catch { po = null; }
+                    parsed[obj.Path] = po;
+                }
+                // Only trust the mapping when the line falls into the method the compiler named.
+                if (po != null && MapCodeLine(po, d.Line) is { } hit && hit.Method.Equals(t.Method, StringComparison.OrdinalIgnoreCase))
+                    return $"{label} → {obj.Path}:{hit.FileLine}:{d.Column}{changed}";
+                return $"{label} → {obj.Path} (compiler line {d.Line}:{d.Column} could not be placed - see xpp_method {t.Name} {t.Method}){changed}";
+            }
+            // Methods of data sources / controls sit in nested classes; their line numbering is not mapped yet.
+            var start = s.Scalar("SELECT start_line FROM methods WHERE object_id = $id AND name = $m AND owner = $o LIMIT 1",
+                ("$id", obj.Id), ("$m", t.Method), ("$o", t.Owner));
+            return $"{label} → {obj.Path}{(start != null ? $" (method starts at line {start}; compiler line {d.Line}:{d.Column} counts through the whole form code)" : "")}{changed}";
+        }
         foreach (var pkg in packages)
         {
             var file = Path.Combine(svc.Cfg.PackagesDir, pkg, "BuildModelResult.xml");
@@ -94,26 +176,7 @@ public sealed partial class Queries
             foreach (var d in res.Items.Where(d => Want(d.Severity)))
             {
                 if (shown++ >= limit) continue;
-                var (type, name, owner, method) = ParseDynamicsPath(d.Path);
-                string where = d.Path;
-                if (name != null)
-                {
-                    var hit = s.Query($"""
-                        SELECT f.path, m.start_line, m.owner FROM methods m JOIN objects o ON o.id = m.object_id JOIN files f ON f.id = m.file_id
-                        WHERE o.name = $n AND o.type = $t AND ($m IS NULL OR m.name = $m)
-                        ORDER BY CASE WHEN IFNULL(m.owner, '') = IFNULL($o, '') THEN 0 ELSE 1 END LIMIT 1
-                        """, ("$n", name), ("$t", type), ("$m", method), ("$o", owner))
-                        .Select(r => (Path: r.GetString(0), Start: r.GetInt32(1))).FirstOrDefault();
-                    var label = $"{type} {name}{(method != null ? "." + (owner != null ? owner + "/" : "") + method : "")}";
-                    if (hit.Path != null)
-                    {
-                        var abs = method != null && d.Line > 0 ? hit.Start + d.Line - 1 : hit.Start;
-                        var changed = File.Exists(hit.Path) && File.GetLastWriteTimeUtc(hit.Path) > built ? "  [file changed after this build]" : "";
-                        where = $"{label}{(d.Line > 0 ? $" L{d.Line}:{d.Column}" : "")} → {hit.Path}:{abs}{changed}";
-                    }
-                    else where = $"{label}{(d.Line > 0 ? $" L{d.Line}:{d.Column}" : "")}";
-                }
-                sb.AppendLine($"  {d.Severity} {where}");
+                sb.AppendLine($"  {d.Severity} {Locate(d, built)}");
                 sb.AppendLine($"      {CodeAnalyzer.Collapse(d.Message, 400)}{(d.Moniker != null ? $" ({d.Moniker})" : "")}");
             }
         }
@@ -121,7 +184,7 @@ public sealed partial class Queries
         if (sev == "error" && shown == 0 && sb.Length > 0) sb.AppendLine("no errors (pass severity=warning or all to list warnings)");
         if (missing.Count > 0) sb.AppendLine($"no BuildModelResult.xml (never built here): {string.Join(", ", missing)}");
         if (sb.Length == 0) sb.Append("no build results found.");
-        sb.AppendLine("(line numbers in build results count from the first line of the method; → shows the line in the XML file)");
+        sb.AppendLine("(→ file:line:column in the object's XML, translated from the compiler's numbering through the object's code)");
         return Finish(sb);
     });
 

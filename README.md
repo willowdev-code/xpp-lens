@@ -68,7 +68,7 @@ xpplens config --packages-dir K:\AosService\PackagesLocalDirectory
 xpplens config --standard-code false             # no call references of Microsoft code (smaller index)
 xpplens config --usage-log false                 # do not record MCP calls for 'xpplens stats'
 xpplens detect [--set]                           # detect PackagesLocalDirectory
-$1
+xpplens build                                    # apply changes
 xpplens build --std-only                         # add the Microsoft standard to an installation made with -NoStandard
 ```
 
@@ -196,7 +196,7 @@ C:\Dev\xpp-lens\
   tests\XppLens.Tests\     xUnit tests + sample AOT XML (Fixtures)
   build.ps1                 compile; -Deploy replaces the binaries in the installation
   pack.ps1                  ZIP package for installing elsewhere
-$1
+  install.ps1 uninstall.ps1 README.md README.pl.md CHANGELOG.md LICENSE
   release-notes.ps1         release notes of one version from CHANGELOG.md (used by the release workflow)
   .github\                  CI and release workflows, issue forms
   build\  dist\             outputs (do not keep anything of your own here)
@@ -240,7 +240,7 @@ dotnet test --logger "console;verbosity=detailed"        # show every test and t
 | `AnalyzerTests.cs` | lexer, method headers, resolved calls, chained calls (`ret:` chains), unresolved receivers, signatures for scaffolding |
 | `AnalyzerTests.cs` → `HelperTests` | method fragments, relation info, `since` parsing, build result paths, batch lists, usage log and report |
 | `QueryTests.cs` | every tool end to end on the fixture index: find (underscore, dotted names, batch), object, method (fragment, batch), callers (custom, chained, standard), refs, callees, extensions, scaffold, security, join, entity, changed, build errors, labels |
-$1
+| `IndexFixture.cs` | builds the temporary index once for all `QueryTests` |
 | `MigrationTests.cs` | taking over an xpp-graft installation (moved, custom location, locked, already there, second run) and `xpplens update` (versions, release JSON, SHA-256, pending notice) |
 
 Adding a test: put the XML the case needs into `Fixtures` (keep names neutral — `Demo*`, `Contoso*`), then add a
@@ -273,7 +273,7 @@ go into a new version.
 | new table or index in the database | `Store.cs` — `EnsureExtras` for in-place changes, `SchemaVersion` only when a rebuild is unavoidable |
 | refresh, watcher, model tiers | `IndexService.cs`, `Indexer.cs`, `Catalog.cs` |
 | packages without XML (`.xref`, `bin\*.md`, label resources) | `BinaryPackage.cs` |
-$1
+| usage log and `stats` | `Usage.cs` |
 | `xpplens update`, taking over xpp-graft | `Updater.cs`, `Migration.cs` |
 | release automation | `.github\workflows\release.yml`, `release-notes.ps1`, `pack.ps1` |
 | CLI commands, configuration, registration in Claude | `Program.cs`, `Config.cs`, `Detect.cs` |
@@ -310,4 +310,6 @@ Bugs and ideas: open an issue (the form asks for the version and what you ran). 
 - Compiled packages: no source code; field group contents and object properties are not reconstructed
   (only the header of `bin\*.md` is read), and references cover only what the compiler recorded.
 - `xpp_join` follows table relations only (not EDT relations); `xpp_changed` does not list deleted objects.
+- `xpp_build_errors` maps compiler lines to the XML file for methods of classes, tables and forms; for methods of form data
+  sources and controls it shows where the method starts.
 - Windows and x64 (self-contained package); the index is not portable between machines — it is built locally.

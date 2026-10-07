@@ -3,6 +3,15 @@
 All notable changes to xpp-lens (called xpp-graft up to 1.2.0). Versions follow `<Version>` in
 `src/XppLens/XppLens.csproj`; release tags are `vX.Y.Z`.
 
+## 1.2.3 — 2026-10-07
+
+### Fixed
+- `xpp_build_errors` pointed at wrong lines: the compiler numbers lines through the object's whole code (the
+  declaration without its closing brace, then every method in file order), not from the start of the method. Lines
+  are now translated that way and accepted only when they fall into the method the compiler named. Metadata
+  diagnostics (form designs, controls, form extensions) show the object's file and the element instead of a raw path.
+  Methods of form data sources and controls show where the method starts; their exact line is not mapped yet.
+
 ## 1.2.2 — 2026-10-07
 
 ### Added
