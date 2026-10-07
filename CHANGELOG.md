@@ -3,11 +3,29 @@
 All notable changes to xpp-lens (called xpp-graft up to 1.2.0). Versions follow `<Version>` in
 `src/XppLens/XppLens.csproj`; release tags are `vX.Y.Z`.
 
-## Unreleased
+## 1.2.2 — 2026-10-07
 
 ### Added
+- `xpplens update` checks GitHub for a newer release; `xpplens update --install` downloads it, verifies its SHA-256
+  digest and runs its installer, keeping settings and index. `status` mentions an available update found by the
+  last check. This is the only network access of xpp-lens and happens only when the command is run.
+- Automated releases: pushing a tag `vX.Y.Z` runs the tests, checks the tag against the project version, builds
+  the package and publishes the release with its notes taken from this file (`release-notes.ps1`).
 - Continuous integration: GitHub Actions builds the solution and runs the tests on Windows for every push and pull request.
 - `SECURITY.md` and issue forms for bug reports and feature requests, which ask not to share customer code or data.
+
+### Changed
+- `xpplens status` / `xpp_status` no longer count all references and labels (tens of seconds on a cold disk);
+  `--counts` / `counts=true` shows them. A standard tier that is listed but not indexed is explained, with the
+  command that indexes it.
+- `xpplens build --std-only` switches `indexStandard` on when an installation was made without the standard tier.
+- Running `install.ps1` over an existing installation keeps its label languages and `PackagesLocalDirectory`
+  unless `-Languages` / `-PackagesDir` are given.
+
+### Fixed
+- Taking over an xpp-graft installation could leave the index behind and build a new one from scratch. The index
+  files are now moved one by one by `xpplens migrate` and checked; when they cannot be moved (in use, or the new
+  folder already holds an index) the new configuration keeps using the old index where it is.
 
 ## 1.2.1 — 2026-10-06
 

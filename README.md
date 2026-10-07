@@ -38,8 +38,9 @@ or the folder layout), writes the configuration, registers the server in Claude 
 builds the index (custom models take about a minute, the Microsoft standard 20–90 minutes once, depending on the disk).
 Close Claude before installing and start it again afterwards.
 
-New release: run `.\pack.ps1` and attach the resulting ZIP to a new release in the Releases tab (tag `vX.Y.Z`
-matching `<Version>` in `src\XppLens\XppLens.csproj`), with the matching section of `CHANGELOG.md` as notes.
+Updating an installation: `xpplens update` shows whether a newer release exists; close Claude and run
+`xpplens update --install` to download it (SHA-256 checked) and run its installer — settings and index are kept.
+Running `install.ps1` from a newer package does the same.
 
 Useful parameters:
 
@@ -67,7 +68,8 @@ xpplens config --packages-dir K:\AosService\PackagesLocalDirectory
 xpplens config --standard-code false             # no call references of Microsoft code (smaller index)
 xpplens config --usage-log false                 # do not record MCP calls for 'xpplens stats'
 xpplens detect [--set]                           # detect PackagesLocalDirectory
-xpplens build                                    # apply changes
+$1
+xpplens build --std-only                         # add the Microsoft standard to an installation made with -NoStandard
 ```
 
 Settings live in `xpplens.json` next to the `bin` folder and can also be edited by hand.
@@ -176,7 +178,7 @@ help and Claude probably fell back to reading files. Switch off with `xpplens co
 ```
 xpplens find|object|method|callers|callees|refs|ext|scaffold|build-errors|security|join|entity|changed|grep|label …
 xpplens build [--full-only] [--std-only] [--compiled-only] [--force]
-xpplens status | stats | detect | config | register | unregister | mcp | version
+xpplens status [--counts] | stats | update [--install] | detect | config | register | unregister | mcp | version
 ```
 
 `xpplens help` lists every option. Environment variables: `XPPLENS_CONFIG` (another configuration),
@@ -194,7 +196,9 @@ C:\Dev\xpp-lens\
   tests\XppLens.Tests\     xUnit tests + sample AOT XML (Fixtures)
   build.ps1                 compile; -Deploy replaces the binaries in the installation
   pack.ps1                  ZIP package for installing elsewhere
-  install.ps1 uninstall.ps1 README.md README.pl.md CHANGELOG.md LICENSE
+$1
+  release-notes.ps1         release notes of one version from CHANGELOG.md (used by the release workflow)
+  .github\                  CI and release workflows, issue forms
   build\  dist\             outputs (do not keep anything of your own here)
 ```
 
@@ -236,10 +240,27 @@ dotnet test --logger "console;verbosity=detailed"        # show every test and t
 | `AnalyzerTests.cs` | lexer, method headers, resolved calls, chained calls (`ret:` chains), unresolved receivers, signatures for scaffolding |
 | `AnalyzerTests.cs` → `HelperTests` | method fragments, relation info, `since` parsing, build result paths, batch lists, usage log and report |
 | `QueryTests.cs` | every tool end to end on the fixture index: find (underscore, dotted names, batch), object, method (fragment, batch), callers (custom, chained, standard), refs, callees, extensions, scaffold, security, join, entity, changed, build errors, labels |
-| `IndexFixture.cs` | builds the temporary index once for all `QueryTests` |
+$1
+| `MigrationTests.cs` | taking over an xpp-graft installation (moved, custom location, locked, already there, second run) and `xpplens update` (versions, release JSON, SHA-256, pending notice) |
 
 Adding a test: put the XML the case needs into `Fixtures` (keep names neutral — `Demo*`, `Contoso*`), then add a
 `[Fact]` to `QueryTests.cs` that calls the query and asserts on the text. Run the tests before every commit.
+
+### Releasing a new version
+
+1. Set `<Version>` in `src\XppLens\XppLens.csproj` and add its section `## X.Y.Z — date` to `CHANGELOG.md`.
+2. Commit, push to `main` and wait for the green CI.
+3. Tag and push the tag:
+
+```powershell
+git tag vX.Y.Z
+git push origin vX.Y.Z
+```
+
+The Release workflow then runs the tests, checks that the tag matches `<Version>`, builds `xpp-lens-X.Y.Z.zip`
+with `pack.ps1` and publishes the release with its notes from `CHANGELOG.md` (preview them with
+`.\release-notes.ps1 -Version X.Y.Z`). Release tags are protected: a published version cannot be changed — fixes
+go into a new version.
 
 ### Where to change what
 
@@ -252,7 +273,9 @@ Adding a test: put the XML the case needs into `Fixtures` (keep names neutral �
 | new table or index in the database | `Store.cs` — `EnsureExtras` for in-place changes, `SchemaVersion` only when a rebuild is unavoidable |
 | refresh, watcher, model tiers | `IndexService.cs`, `Indexer.cs`, `Catalog.cs` |
 | packages without XML (`.xref`, `bin\*.md`, label resources) | `BinaryPackage.cs` |
-| usage log and `stats` | `Usage.cs` |
+$1
+| `xpplens update`, taking over xpp-graft | `Updater.cs`, `Migration.cs` |
+| release automation | `.github\workflows\release.yml`, `release-notes.ps1`, `pack.ps1` |
 | CLI commands, configuration, registration in Claude | `Program.cs`, `Config.cs`, `Detect.cs` |
 
 Work loop:

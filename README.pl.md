@@ -38,8 +38,9 @@ układu katalogów), zapisuje konfigurację, rejestruje serwer w Claude Desktop 
 (modele własne ok. minuty, standard Microsoftu jednorazowo 20–90 minut, zależnie od dysku). Przed instalacją zamknij
 Claude'a. Po instalacji uruchom go ponownie.
 
-Nowe wydanie: `.\pack.ps1`, a powstały ZIP dołącz do nowego wydania w zakładce Releases (tag `vX.Y.Z` zgodny
-z `<Version>` w `src\XppLens\XppLens.csproj`), jako opis daj odpowiednią sekcję `CHANGELOG.md`.
+Aktualizacja instalacji: `xpplens update` pokazuje, czy jest nowsze wydanie; zamknij Claude'a i uruchom
+`xpplens update --install`, żeby je pobrać (z kontrolą SHA-256) i uruchomić jego instalator — ustawienia i indeks zostają.
+To samo daje uruchomienie `install.ps1` z nowszej paczki.
 
 Przydatne parametry:
 
@@ -67,7 +68,8 @@ xpplens config --packages-dir K:\AosService\PackagesLocalDirectory
 xpplens config --standard-code false             # bez wywołań z kodu Microsoftu (mniejszy indeks)
 xpplens config --usage-log false                 # nie zapisuj wywołań MCP dla 'xpplens stats'
 xpplens detect [--set]                           # wykryj PackagesLocalDirectory
-xpplens build                                    # zastosuj zmiany
+$1
+xpplens build --std-only                         # dołóż standard Microsoftu do instalacji z -NoStandard
 ```
 
 Ustawienia siedzą w `xpplens.json` obok katalogu `bin` — można je też edytować ręcznie.
@@ -177,7 +179,7 @@ miejsca, gdzie narzędzie nie pomogło i Claude zapewne wrócił do czytania pli
 ```
 xpplens find|object|method|callers|callees|refs|ext|scaffold|build-errors|security|join|entity|changed|grep|label …
 xpplens build [--full-only] [--std-only] [--compiled-only] [--force]
-xpplens status | stats | detect | config | register | unregister | mcp | version
+xpplens status [--counts] | stats | update [--install] | detect | config | register | unregister | mcp | version
 ```
 
 `xpplens help` wypisuje wszystkie opcje. Zmienne: `XPPLENS_CONFIG` (inna konfiguracja), `XPPLENS_VERBOSE=1`
@@ -195,7 +197,9 @@ C:\Dev\xpp-lens\
   tests\XppLens.Tests\     testy xUnit + przykładowe XML-e z AOT (Fixtures)
   build.ps1                 kompilacja; -Deploy podmienia binaria w instalacji
   pack.ps1                  pakiet ZIP do instalacji gdzie indziej
-  install.ps1 uninstall.ps1 README.md README.pl.md CHANGELOG.md LICENSE
+$1
+  release-notes.ps1         opis wydania jednej wersji z CHANGELOG.md (używa go workflow wydań)
+  .github\                  workflowy CI i wydań, formularze zgłoszeń
   build\  dist\             wyniki (nie trzymaj tu niczego własnego)
 ```
 
@@ -237,10 +241,26 @@ dotnet test --logger "console;verbosity=detailed"        # każdy test i szczeg�
 | `AnalyzerTests.cs` | lekser, nagłówki metod, rozwiązane wywołania, wywołania łańcuchowe (łańcuchy `ret:`), nierozwiązani odbiorcy, sygnatury do szkieletów |
 | `AnalyzerTests.cs` → `HelperTests` | fragmenty metod, informacje o relacjach, parsowanie `since`, ścieżki z wyników builda, listy zbiorcze, dziennik użycia i raport |
 | `QueryTests.cs` | każde narzędzie od początku do końca na indeksie z przykładów: find (podkreślnik, nazwy z kropką, wiele zapytań), object, method (fragment, wiele metod), callers (własne, łańcuchowe, standard), refs, callees, extensions, scaffold, security, join, entity, changed, build errors, etykiety |
-| `IndexFixture.cs` | buduje tymczasowy indeks raz dla wszystkich `QueryTests` |
+$1
+| `MigrationTests.cs` | przejęcie instalacji xpp-graft (przeniesienie, inna lokalizacja, plik zablokowany, cel zajęty, drugie uruchomienie) i `xpplens update` (wersje, JSON wydania, SHA-256, komunikat o aktualizacji) |
 
 Dodanie testu: włóż potrzebny XML do `Fixtures` (nazwy neutralne — `Demo*`, `Contoso*`), potem dopisz `[Fact]`
 w `QueryTests.cs`, który woła zapytanie i sprawdza tekst odpowiedzi. Uruchamiaj testy przed każdym commitem.
+
+### Wydanie nowej wersji
+
+1. Ustaw `<Version>` w `src\XppLens\XppLens.csproj` i dopisz jej sekcję `## X.Y.Z — data` w `CHANGELOG.md`.
+2. Commit, push na `main` i poczekaj na zielone CI.
+3. Utwórz i wypchnij tag:
+
+```powershell
+git tag vX.Y.Z
+git push origin vX.Y.Z
+```
+
+Workflow Release uruchamia wtedy testy, sprawdza zgodność tagu z `<Version>`, buduje `xpp-lens-X.Y.Z.zip`
+przez `pack.ps1` i publikuje wydanie z opisem z `CHANGELOG.md` (podgląd: `.\release-notes.ps1 -Version X.Y.Z`).
+Tagi wydań są chronione: opublikowanej wersji nie da się zmienić — poprawki idą do nowej wersji.
 
 ### Gdzie co dopisać
 
@@ -253,7 +273,9 @@ w `QueryTests.cs`, który woła zapytanie i sprawdza tekst odpowiedzi. Uruchamia
 | nowa tabela lub indeks w bazie | `Store.cs` — `EnsureExtras` dla zmian w miejscu, `SchemaVersion` tylko gdy przebudowa jest nieunikniona |
 | odświeżanie, obserwator, poziomy modeli | `IndexService.cs`, `Indexer.cs`, `Catalog.cs` |
 | pakiety bez XML (`.xref`, `bin\*.md`, zasoby z etykietami) | `BinaryPackage.cs` |
-| dziennik użycia i `stats` | `Usage.cs` |
+$1
+| `xpplens update`, przejęcie xpp-graft | `Updater.cs`, `Migration.cs` |
+| automatyczne wydania | `.github\workflows\release.yml`, `release-notes.ps1`, `pack.ps1` |
 | polecenia CLI, konfiguracja, rejestracja w Claude | `Program.cs`, `Config.cs`, `Detect.cs` |
 
 Pętla pracy:

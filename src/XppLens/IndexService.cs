@@ -329,7 +329,11 @@ public sealed class IndexService : IDisposable
         }
     }
 
-    public string StatusText()
+    /// <summary>
+    /// Index overview. Counting all references and labels reads most of the index file — tens of seconds on a cold
+    /// disk — so those two counts only come with <paramref name="counts"/>.
+    /// </summary>
+    public string StatusText(bool counts = false)
     {
         return Read(s =>
         {
@@ -346,9 +350,14 @@ public sealed class IndexService : IDisposable
                 var title = tier switch { 1 => "full tier", 0 => "standard tier", _ => "compiled packages" };
                 var unit = tier == -1 ? "objects" : "files";
                 sb.AppendLine($"{title}: {q.Item1} models, {q.Item2} {unit}, last indexed {q.Item3}");
+                if (tier == 0 && q.Item1 > 0 && q.Item2 == 0)
+                    sb.AppendLine(Cfg.IndexStandard
+                        ? "  standard models are listed but not indexed yet (first build not run or interrupted): run 'xpplens build --std-only'"
+                        : "  standard models are listed but NOT indexed (indexStandard = false): run 'xpplens build --std-only' to index them");
             }
-            foreach (var t in new[] { "objects", "methods", "members", "refs", "sources", "labels" })
+            foreach (var t in counts ? ["objects", "methods", "members", "sources", "refs", "labels"] : new[] { "objects", "methods", "members", "sources" })
                 sb.AppendLine($"  {t}: {s.Scalar($"SELECT COUNT(*) FROM {t}")}");
+            if (!counts) sb.AppendLine("  refs, labels: not counted (slow on a cold disk) — 'xpplens status --counts'");
             var full = string.Join(", ", Models.Where(m => m.Full).Select(m => m.Package == m.Name ? m.Name : $"{m.Package}/{m.Name}"));
             sb.AppendLine($"full-tier models: {full}");
             var compiled = Models.Where(m => m.Binary).Select(m => m.Package).ToList();
@@ -367,6 +376,7 @@ public sealed class IndexService : IDisposable
             sb.AppendLine($"watchers: {_watchers.Count}, last full-tier scan: {(_lastScanUtc == DateTime.MinValue ? "never" : _lastScanUtc.ToLocalTime().ToString("HH:mm:ss"))}, " +
                           $"last change: {(_lastChangeUtc == DateTime.MinValue ? "-" : $"{_lastChangeUtc.ToLocalTime():HH:mm:ss} ({_lastChangeCount} files)")}");
             sb.AppendLine($"background: {BackgroundStatus}");
+            if (Updater.PendingNotice() is { } notice) sb.AppendLine(notice);
             return sb.ToString();
         });
     }

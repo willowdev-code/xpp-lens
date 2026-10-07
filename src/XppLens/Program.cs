@@ -34,6 +34,19 @@ if (cmd is "version" or "--version" or "-v")
     return 0;
 }
 
+if (cmd == "update")
+    return await Updater.Run(install: Flag("install"));
+
+if (cmd == "migrate")
+{
+    // Used by install.ps1 when it finds an xpp-graft installation (the name up to 1.2.0).
+    var from = Opt("from") ?? @"C:\Tools\xpp-graft";
+    var to = Opt("config") ?? Config.DefaultPath();
+    var res = Migration.FromXppGraft(from, to, Migration.DefaultOldDataRoot, Migration.DefaultNewDataRoot);
+    foreach (var m in res.Messages) Console.WriteLine("  " + m);
+    return 0;
+}
+
 var cfg = Config.Load();
 Usage.Enabled = Usage.Enabled && cfg.UsageLog;
 
@@ -236,7 +249,10 @@ if (cmd is "help" or "-h" or "--help")
                           --index-standard true|false | --standard-code true|false
                           --rescan-seconds 300 | --usage-log true|false
           xpplens build [--full-only] [--std-only] [--compiled-only] [--force]   build / update the index
-          xpplens status
+                        (--std-only also switches indexStandard on when an installation was made without it)
+          xpplens status [--counts]                              --counts: also count references and labels (slow on a cold disk)
+          xpplens update [--install]                             check GitHub for a newer release; --install downloads,
+                                                                 verifies (SHA-256) and installs it, keeping settings and index
           xpplens stats [--days 7] [--top 10]                   tokens, time and empty answers of MCP calls
           xpplens find <query[;query…]> [--kind any|object|method|field] [--type t] [--model m] [--limit n]
           xpplens object <name[;name…]> [--type t] [--sections list] [--parent control] [--depth n] [--filter *text*]
@@ -278,6 +294,13 @@ try
                 Console.Error.WriteLine(service.ReadOnlyNote);
                 return 1;
             }
+            if (stdOnly && !cfg.IndexStandard)
+            {
+                // Asking for the standard tier explicitly is the way to add it to an installation made without it.
+                cfg.IndexStandard = true;
+                cfg.Save();
+                Log.Info($"indexStandard was false - switched on in {cfg.SourcePath} (restart Claude afterwards)");
+            }
             Log.Info($"catalog: {cfg.PackagesDir}");
             service.SyncCatalog();
             Log.Info($"models: {service.Models.Count(m => m.Full)} full, {service.Models.Count(m => !m.Full)} standard");
@@ -309,9 +332,12 @@ try
             break;
         }
         case "status":
+        {
+            bool counts = Flag("counts");
             service.SyncCatalog();
-            Console.WriteLine(service.StatusText());
+            Console.WriteLine(service.StatusText(counts));
             break;
+        }
         default:
         {
             service.SyncCatalog();

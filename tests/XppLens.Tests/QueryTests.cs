@@ -16,6 +16,17 @@ public class QueryTests(IndexFixture fx)
     }
 
     [Fact]
+    public void Status_skips_slow_counts_unless_asked()
+    {
+        var quick = fx.Service.StatusText();
+        Assert.DoesNotContain("  refs:", quick);
+        Assert.Contains("not counted", quick);
+        var full = fx.Service.StatusText(counts: true);
+        Assert.Contains("  refs:", full);
+        Assert.Contains("  labels:", full);
+    }
+
+    [Fact]
     public void Find_treats_underscore_literally()
     {
         var res = Q.Find("calc_T*", "method", null, null, 40);

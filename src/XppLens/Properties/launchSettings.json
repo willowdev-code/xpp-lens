@@ -60,6 +60,10 @@
       "commandLineArgs": "build-errors --severity warning",
       "environmentVariables": { "XPPLENS_CONFIG": "C:\\Tools\\xpp-lens\\xpplens.json" }
     },
+    "update (check only)": {
+      "commandName": "Project",
+      "commandLineArgs": "update"
+    },
     "build compiled packages": {
       "commandName": "Project",
       "commandLineArgs": "build --compiled-only --force",

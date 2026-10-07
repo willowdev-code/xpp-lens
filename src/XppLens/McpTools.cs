@@ -196,5 +196,7 @@ public static class McpTools
 
     [McpServerTool(Name = "xpp_status", ReadOnly = true)]
     [Description("Index status: indexed models per tier, counts, last refresh, background standard-tier indexing.")]
-    public static string Status(IndexService svc) => Run("xpp_status", new { }, svc.StatusText);
+    public static string Status(IndexService svc,
+        [Description("Also count all references and labels (can take tens of seconds right after a restart)")] bool counts = false)
+        => Run("xpp_status", new { counts }, () => svc.StatusText(counts));
 }

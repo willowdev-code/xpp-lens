@@ -16,9 +16,13 @@
     .\install.ps1 -PackagesDir K:\AosService\PackagesLocalDirectory -Languages en-US,de -FullModels XPL,XPLCore
 
 .NOTES
+    Running it again over an existing installation (an update) keeps its settings: languages and the
+    PackagesLocalDirectory change only when you pass -Languages / -PackagesDir explicitly.
+
     Upgrading from xpp-graft (the former name): the installer takes over its settings, moves its index
-    and usage log to %LOCALAPPDATA%\xpp-lens without rebuilding, and removes its MCP entries.
-    The old folder (-MigrateFrom, default C:\Tools\xpp-graft) is left for you to delete.
+    and usage log to %LOCALAPPDATA%\xpp-lens without rebuilding (or keeps using the old index where it is
+    when it cannot be moved), and removes its MCP entries. The old folder (-MigrateFrom, default
+    C:\Tools\xpp-graft) is left for you to delete.
 #>
 [CmdletBinding()]
 param(
@@ -63,29 +67,19 @@ if ((Test-Path $oldConfig) -and -not (Test-Path $newConfig)) {
     $oldExe = Join-Path $MigrateFrom 'bin\xppgraft.exe'
     if (Test-Path $oldExe) { & $oldExe unregister }
 
-    $migrated = Get-Content $oldConfig -Raw | ConvertFrom-Json
-    $oldRoot = Join-Path $env:LOCALAPPDATA 'xpp-graft'
-    $newRoot = Join-Path $env:LOCALAPPDATA 'xpp-lens'
-    $index = [string]$migrated.indexPath
-    # Only the default per-user location is moved; an index you placed elsewhere stays where it is.
-    if (-not $index -or $index.StartsWith($oldRoot, [StringComparison]::OrdinalIgnoreCase)) {
-        foreach ($sub in 'index', 'usage') {
-            $from = Join-Path $oldRoot $sub
-            $to = Join-Path $newRoot $sub
-            if ((Test-Path $from) -and -not (Test-Path $to)) {
-                New-Item -ItemType Directory -Force -Path $newRoot | Out-Null
-                Move-Item $from $to
-                Say "moved $from -> $to"
-            }
-        }
-        if ($index) {
-            $migrated.indexPath = [regex]::Replace($index, [regex]::Escape($oldRoot), $newRoot.Replace('$', '$$'), 'IgnoreCase')
-        }
-    }
+    # Settings, index and usage log: moved file by file and checked; if the index cannot be moved,
+    # the new configuration keeps using it where it is (no rebuild from scratch).
     New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
-    $migrated | ConvertTo-Json -Depth 5 | Set-Content $newConfig -Encoding UTF8
-    Say "settings taken over: $newConfig"
-    if (-not $PackagesDir -and $migrated.packagesDir) { $PackagesDir = [string]$migrated.packagesDir }
+    & (Join-Path $src 'bin\xpplens.exe') migrate --from $MigrateFrom --config $newConfig
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $newConfig)) { throw "Taking over the former installation failed." }
+    $migrated = $true
+}
+
+# An existing configuration (update, reinstall, taken over) keeps its values unless they are passed explicitly.
+$hadConfig = Test-Path $newConfig
+if ($hadConfig -and -not $PackagesDir) {
+    $PackagesDir = [string](Get-Content $newConfig -Raw | ConvertFrom-Json).packagesDir
+    if ($PackagesDir) { Say "keeping PackagesLocalDirectory from $newConfig" }
 }
 
 Head "1/5 Copying files to $InstallDir"
@@ -142,8 +136,8 @@ Say "using: $PackagesDir"
 
 Head "3/5 Configuration"
 $cfgArgs = @('config', '--packages-dir', $PackagesDir)
-# Taken-over settings keep their languages unless -Languages is given explicitly.
-if (-not $migrated -or $PSBoundParameters.ContainsKey('Languages')) { $cfgArgs += @('--languages', ($Languages -join ',')) }
+# Existing settings keep their languages unless -Languages is given explicitly.
+if (-not $hadConfig -or $PSBoundParameters.ContainsKey('Languages')) { $cfgArgs += @('--languages', ($Languages -join ',')) }
 if ($DisplayLanguage) { $cfgArgs += @('--display-language', $DisplayLanguage) }
 if ($FullModels.Count)     { $cfgArgs += @('--full-models', ($FullModels -join ',')) }
 if ($StandardModels.Count) { $cfgArgs += @('--standard-models', ($StandardModels -join ',')) }
@@ -167,7 +161,7 @@ if ($NoBuild) {
     Say "skipped (-NoBuild). Manually: `"$exe`" build"
 }
 else {
-    Say "custom models: about 1 minute; Microsoft standard: 20-40 minutes (once)"
+    Say "custom models: about 1 minute; Microsoft standard: 20-90 minutes the first time, then only what changed"
     & $exe build
     if ($LASTEXITCODE -ne 0) { throw "Building the index failed." }
 }

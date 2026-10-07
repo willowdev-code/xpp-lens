@@ -1,0 +1,52 @@
+name: Release
+
+# Pushing a tag vX.Y.Z publishes the release: tests, package, notes from CHANGELOG.md.
+# The tag must match <Version> in src/XppLens/XppLens.csproj; release tags cannot be moved afterwards.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: release
+    runs-on: windows-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Check that the tag matches the project version
+        shell: pwsh
+        run: |
+          $version = ([xml](Get-Content src/XppLens/XppLens.csproj -Raw)).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
+          if ("v$version" -ne $env:TAG) { throw "tag $env:TAG does not match <Version>$version</Version> in src/XppLens/XppLens.csproj" }
+          "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Test
+        run: dotnet test xpp-lens.sln -c Release
+
+      - name: Release notes
+        shell: powershell
+        run: .\release-notes.ps1 -Version $env:VERSION -OutFile dist\notes.md
+
+      - name: Package
+        shell: powershell
+        run: .\pack.ps1 -OutDir dist
+
+      - name: Publish the release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create $env:TAG "dist/xpp-lens-$env:VERSION.zip" --title "xpp-lens $env:VERSION" --notes-file dist/notes.md --verify-tag --latest
