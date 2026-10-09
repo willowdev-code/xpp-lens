@@ -66,6 +66,23 @@ public sealed partial class Queries(IndexService svc)
     static string? PatOrNull(string? q) => string.IsNullOrWhiteSpace(q) ? null : Pat(q.Trim());
     static bool HasWildcard(string q) => q.Contains('*') || q.Contains('?');
 
+    /// <summary>
+    /// Filter on one or more wildcard names ("A*;B_*"): "(col LIKE $p0 OR col LIKE $p1 …)" over the given columns,
+    /// with the parameters added to <paramref name="args"/>; "1=1" when no name is given.
+    /// </summary>
+    static string AnyLike(string? names, string param, List<(string, object?)> args, params string[] columns)
+    {
+        var list = SplitList(names);
+        if (list.Count == 0) return "1=1";
+        var parts = new List<string>();
+        for (int i = 0; i < list.Count; i++)
+        {
+            args.Add(($"{param}{i}", Pat(list[i])));
+            parts.AddRange(columns.Select(c => $"{c} LIKE {param}{i} ESCAPE '!'"));
+        }
+        return "(" + string.Join(" OR ", parts) + ")";
+    }
+
     static string Trunc(string? s, int max) => s == null ? "" : s.Length <= max ? s : s[..max] + "…";
 
     string Finish(StringBuilder sb)
@@ -931,6 +948,30 @@ public sealed partial class Queries(IndexService svc)
 
     // ---------------------------------------------------------------- grep
 
+    /// <summary>
+    /// Microsoft code is indexed for calls, types and fields: a pattern that is really a name is answered at once by
+    /// xpp_refs / xpp_callers, without reading XML.
+    /// </summary>
+    static readonly HashSet<string> XppKeywords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "while", "select", "where", "join", "outer", "exists", "notexists", "firstonly", "firstfast", "forupdate",
+        "crosscompany", "index", "hint", "order", "group", "new", "this", "super", "next", "return", "if", "else",
+        "true", "false", "null", "ttsbegin", "ttscommit", "str", "int", "real", "var", "void", "static", "public",
+    };
+
+    static string StandardGrepHint(string pattern)
+    {
+        var names = Regex.Matches(pattern, @"[A-Za-z_][A-Za-z0-9_]{2,}").Select(m => m.Value)
+            .Where(n => !XppKeywords.Contains(n))
+            .Distinct(StringComparer.OrdinalIgnoreCase).Take(2).ToList();
+        if (names.Count == 0) return "";
+        var member = Regex.Match(pattern, @"([A-Za-z_]\w*)\s*(?:::|\\?\.)\s*([A-Za-z_]\w*)");
+        var example = member.Success
+            ? $"xpp_callers objectName={member.Groups[1].Value} method={member.Groups[2].Value}, or xpp_refs name={member.Groups[1].Value} member={member.Groups[2].Value}"
+            : $"xpp_refs name={names[0]}";
+        return $"\nTo find uses of a name in Microsoft code without reading XML: {example}.";
+    }
+
     public string Grep(string pattern, string? model, string? type, string? objectName, bool standard, int limit) => svc.Read(s =>
     {
         limit = Math.Clamp(limit, 1, 500);
@@ -944,8 +985,10 @@ public sealed partial class Queries(IndexService svc)
             return $"invalid regex: {ex.Message}";
         }
         var tp = TypePattern(type);
-        var modelLike = PatOrNull(model);
-        var objLike = PatOrNull(objectName);
+        // model and objectName take several wildcard names separated by ';', like the other tools.
+        var args = new List<(string, object?)> { ("$tp", tp) };
+        var modelSql = AnyLike(model, "$model", args, "md.name", "md.package");
+        var objSql = AnyLike(objectName, "$obj", args, "o.name");
         var hits = new List<(string Type, string Obj, string Tag, string Path, string Method, int Line, string Text)>();
         int total = 0;
 
@@ -955,10 +998,9 @@ public sealed partial class Queries(IndexService svc)
                 SELECT s.text, m.start_line, m.name, m.owner, o.type, o.name, f.path, md.package, md.name, md.tier
                 FROM sources s JOIN methods m ON m.id = s.method_id JOIN objects o ON o.id = m.object_id
                 JOIN files f ON f.id = s.file_id JOIN models md ON md.id = f.model_id
-                WHERE ($model IS NULL OR md.name LIKE $model ESCAPE '!' OR md.package LIKE $model ESCAPE '!')
-                  AND ($obj IS NULL OR o.name LIKE $obj ESCAPE '!') {(tp != null ? "AND o.type LIKE $tp" : "")}
+                WHERE {modelSql} AND {objSql} {(tp != null ? "AND o.type LIKE $tp" : "")}
                 ORDER BY md.name, o.name, m.start_line
-                """, ("$model", modelLike), ("$obj", objLike), ("$tp", tp)))
+                """, [.. args]))
             {
                 var text = r.GetString(0);
                 int lastLine = -1;
@@ -982,20 +1024,21 @@ public sealed partial class Queries(IndexService svc)
         }
         else
         {
-            if (modelLike == null && objLike == null)
-                return "standard grep reads XML files from disk: pass model (package or model name) or object to limit the scope.";
+            if (modelSql == "1=1" && objSql == "1=1")
+                return "standard grep reads XML files from disk: pass model (package or model name) or objectName to limit the scope." +
+                       StandardGrepHint(pattern);
             var files = s.Query($"""
                 SELECT DISTINCT f.id, f.path, md.package, md.name, md.tier, o.type, o.name FROM files f JOIN models md ON md.id = f.model_id
                 JOIN objects o ON o.file_id = f.id
-                WHERE ($model IS NULL OR md.name LIKE $model ESCAPE '!' OR md.package LIKE $model ESCAPE '!') AND ($obj IS NULL OR o.name LIKE $obj ESCAPE '!')
-                  {(tp != null ? "AND o.type LIKE $tp" : "")}
+                WHERE {modelSql} AND {objSql} {(tp != null ? "AND o.type LIKE $tp" : "")}
                 ORDER BY md.name, o.name
-                """, ("$model", modelLike), ("$obj", objLike), ("$tp", tp))
+                """, [.. args])
                 .Select(r => (Id: r.GetInt64(0), Path: r.GetString(1), Tag: Tag(r.GetString(2), r.GetString(3), r.GetInt32(4)),
                     Type: r.GetString(5), Obj: r.GetString(6))).ToList();
             if (files.Count > 60000)
-                return $"scope too large ({files.Count} XML files to read); narrow with model/object/type, or index that package fully " +
-                       "(xpplens config --add-full-model <package> + xpplens build), which makes grep and the call graph instant there.";
+                return $"scope too large ({files.Count} XML files to read); narrow with objectName (e.g. 'Sales*;Cust*') or type=class, " +
+                       "or index that package fully (xpplens config --add-full-model <package> + xpplens build), which makes grep and " +
+                       "the call graph instant there." + StandardGrepHint(pattern);
 
             // Scan the XML files in parallel, then resolve line -> method for the few files that matched.
             files = files.Where(f => !BinaryPackage.IsPseudoPath(f.Path)).ToList();
@@ -1033,10 +1076,10 @@ public sealed partial class Queries(IndexService svc)
 
             if (perFile.Count > 0)
             {
-                var args = new List<(string, object?)>();
-                var ids = InList("$f", perFile.Select(p => (object?)p.File.Id).ToList(), args);
+                var idArgs = new List<(string, object?)>();
+                var ids = InList("$f", perFile.Select(p => (object?)p.File.Id).ToList(), idArgs);
                 var ranges = new Dictionary<long, List<(string Name, string? Owner, int Start, int End)>>();
-                foreach (var r in s.Query($"SELECT file_id, name, owner, start_line, end_line FROM methods WHERE file_id IN ({ids}) ORDER BY start_line", args.ToArray()))
+                foreach (var r in s.Query($"SELECT file_id, name, owner, start_line, end_line FROM methods WHERE file_id IN ({ids}) ORDER BY start_line", idArgs.ToArray()))
                 {
                     var fid = r.GetInt64(0);
                     if (!ranges.TryGetValue(fid, out var list)) ranges[fid] = list = [];

@@ -36,11 +36,14 @@ powershell -ExecutionPolicy Bypass -File .\dist\xpp-lens\install.ps1 -Languages 
 The installer copies the files to `C:\Tools\xpp-lens`, detects `PackagesLocalDirectory` (from the AOS `web.config`
 or the folder layout), writes the configuration, registers the server in Claude Desktop and Claude Code, and finally
 builds the index (custom models take about a minute, the Microsoft standard 20–90 minutes once, depending on the disk).
-Close Claude before installing and start it again afterwards.
+Claude may stay open: start a new session afterwards (or restart Claude Desktop) to load the server.
 
-Updating an installation: `xpplens update` shows whether a newer release exists; close Claude and run
-`xpplens update --install` to download it (SHA-256 checked) and run its installer — settings and index are kept.
-Running `install.ps1` from a newer package does the same.
+Updating an installation: `xpplens update` shows whether a newer release exists; `xpplens update --install` downloads
+it (SHA-256 checked) and runs its installer — settings and index are kept. Running `install.ps1` from a newer package
+does the same. Claude does not have to be closed: an `xpplens.exe` used by an open session is renamed to `*.old`
+(deleted later), so that session keeps the old version and new sessions start the new one. At the end the installer
+offers to restart Claude Desktop (`xpplens update --install --restart-claude` or `install.ps1 -RestartClaude`: without
+asking); in Claude Code `/mcp` → reconnect xpp-lens does the same for one session.
 
 Useful parameters:
 
@@ -242,6 +245,7 @@ dotnet test --logger "console;verbosity=detailed"        # show every test and t
 | `QueryTests.cs` | every tool end to end on the fixture index: find (underscore, dotted names, batch), object, method (fragment, batch), callers (custom, chained, standard), refs, callees, extensions, scaffold, security, join, entity, changed, build errors, labels |
 | `IndexFixture.cs` | builds the temporary index once for all `QueryTests` |
 | `MigrationTests.cs` | taking over an xpp-graft installation (moved, custom location, locked, already there, second run) and `xpplens update` (versions, release JSON, SHA-256, pending notice) |
+| `CommandLineTests.cs` | options with one or two dashes, `--name=value`, options before arguments, unknown options and missing values as errors, `--` |
 
 Adding a test: put the XML the case needs into `Fixtures` (keep names neutral — `Demo*`, `Contoso*`), then add a
 `[Fact]` to `QueryTests.cs` that calls the query and asserts on the text. Run the tests before every commit.

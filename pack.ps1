@@ -57,7 +57,19 @@ if (-not $NoZip) {
     if (-not $version) { $version = Get-Date -Format 'yyyyMMdd' }
     $zip = Join-Path $OutDir "xpp-lens-$version.zip"
     if (Test-Path $zip) { Remove-Item $zip -Force }
-    Compress-Archive -Path $stage -DestinationPath $zip
+    # Entries with '/' as the ZIP format requires (Compress-Archive in Windows PowerShell 5.1 writes '\').
+    Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
+    $archive = [IO.Compression.ZipFile]::Open($zip, [IO.Compression.ZipArchiveMode]::Create)
+    try {
+        $root = Split-Path $stage -Parent
+        foreach ($file in Get-ChildItem $stage -Recurse -File) {
+            $entry = $file.FullName.Substring($root.Length + 1).Replace('\', '/')
+            [void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $file.FullName, $entry, [IO.Compression.CompressionLevel]::Optimal)
+        }
+    }
+    finally {
+        $archive.Dispose()
+    }
     Write-Host "zip: $zip ($([math]::Round((Get-Item $zip).Length / 1MB, 1)) MB)" -ForegroundColor Cyan
 }
 

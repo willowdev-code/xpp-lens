@@ -179,9 +179,9 @@ public static class McpTools
     [Description("Regex search (case-insensitive) inside X++ method bodies; hits grouped by object and method with file line numbers. Custom models by default; standard=true searches standard XML and requires model or object filter.")]
     public static string Grep(Queries q,
         [Description(".NET regex, e.g. 'ttsbegin', 'SalesTable::find\\\\(', 'while select.*InventTrans'")] string pattern,
-        [Description("Optional model/package filter (wildcards)")] string? model = null,
+        [Description("Optional model/package filter (wildcards; several with ';')")] string? model = null,
         [Description("Optional object type filter")] string? type = null,
-        [Description("Optional object name filter (wildcards)")] string? objectName = null,
+        [Description("Optional object name filter (wildcards; several with ';', e.g. 'ContosoExport*;ContosoEntity_*')")] string? objectName = null,
         [Description("Search standard (Microsoft) models instead of custom ones")] bool standard = false,
         [Description("Max hits shown (default 80)")] int limit = 80)
         => Run("xpp_grep", new { pattern, model, type, objectName, standard, limit }, () => q.Grep(pattern, model, type, objectName, standard, limit));

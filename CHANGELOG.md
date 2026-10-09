@@ -3,6 +3,24 @@
 All notable changes to xpp-lens (called xpp-graft up to 1.2.0). Versions follow `<Version>` in
 `src/XppLens/XppLens.csproj`; release tags are `vX.Y.Z`.
 
+## 1.2.5 — 2026-10-09
+
+### Changed
+- Updating no longer needs Claude to be closed. The installer does not stop running `xpplens.exe` processes any
+  more: a file in use is renamed to `*.old`, so open sessions keep working on the old version and new sessions start
+  the new one; the next start of xpplens deletes the leftovers. At the end the installer offers to restart Claude
+  Desktop; `xpplens update --install --restart-claude` (`install.ps1 -RestartClaude`) does it without asking.
+  Claude Code processes in terminals are never stopped.
+- `xpp_grep` accepts several names separated by `;` in `objectName` and `model`, like the other tools. The answer
+  for standard code without a scope, or with too large a scope, points to `xpp_refs` / `xpp_callers` for names.
+- The release package stores its paths with `/`, as the ZIP format requires.
+- GitHub Actions: `actions/checkout` v7 and `actions/setup-dotnet` v6 (Node 24).
+
+### Fixed
+- Command line options: `-install` was silently ignored (only `--install` was known), so `xpplens update -install`
+  only checked for the update. Options now work with one or two dashes and as `--name=value`, may come before the
+  arguments, and an unknown option or a missing value stops with an error that lists the options of the command.
+
 ## 1.2.4 — 2026-10-07
 
 ### Added

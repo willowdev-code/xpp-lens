@@ -35,12 +35,15 @@ powershell -ExecutionPolicy Bypass -File .\dist\xpp-lens\install.ps1 -Languages 
 
 Instalator kopiuje pliki do `C:\Tools\xpp-lens`, wykrywa `PackagesLocalDirectory` (z `web.config` AOS-a albo
 układu katalogów), zapisuje konfigurację, rejestruje serwer w Claude Desktop i Claude Code, a na końcu buduje indeks
-(modele własne ok. minuty, standard Microsoftu jednorazowo 20–90 minut, zależnie od dysku). Przed instalacją zamknij
-Claude'a. Po instalacji uruchom go ponownie.
+(modele własne ok. minuty, standard Microsoftu jednorazowo 20–90 minut, zależnie od dysku). Claude może zostać
+otwarty: po instalacji zacznij nową sesję (albo uruchom ponownie Claude Desktop), żeby wczytał serwer.
 
-Aktualizacja instalacji: `xpplens update` pokazuje, czy jest nowsze wydanie; zamknij Claude'a i uruchom
-`xpplens update --install`, żeby je pobrać (z kontrolą SHA-256) i uruchomić jego instalator — ustawienia i indeks zostają.
-To samo daje uruchomienie `install.ps1` z nowszej paczki.
+Aktualizacja instalacji: `xpplens update` pokazuje, czy jest nowsze wydanie; `xpplens update --install` pobiera je
+(z kontrolą SHA-256) i uruchamia jego instalator — ustawienia i indeks zostają. To samo daje uruchomienie `install.ps1`
+z nowszej paczki. Nie trzeba zamykać Claude'a: `xpplens.exe` używany przez otwartą sesję dostaje nazwę `*.old`
+(usuwaną później), więc ta sesja działa dalej na starej wersji, a nowe sesje startują już na nowej. Na końcu instalator
+proponuje ponowne uruchomienie Claude Desktop (`xpplens update --install --restart-claude` albo
+`install.ps1 -RestartClaude` — bez pytania); w Claude Code to samo dla jednej sesji daje `/mcp` → reconnect xpp-lens.
 
 Przydatne parametry:
 
@@ -243,6 +246,7 @@ dotnet test --logger "console;verbosity=detailed"        # każdy test i szczeg�
 | `QueryTests.cs` | każde narzędzie od początku do końca na indeksie z przykładów: find (podkreślnik, nazwy z kropką, wiele zapytań), object, method (fragment, wiele metod), callers (własne, łańcuchowe, standard), refs, callees, extensions, scaffold, security, join, entity, changed, build errors, etykiety |
 | `IndexFixture.cs` | buduje tymczasowy indeks raz dla wszystkich `QueryTests` |
 | `MigrationTests.cs` | przejęcie instalacji xpp-graft (przeniesienie, inna lokalizacja, plik zablokowany, cel zajęty, drugie uruchomienie) i `xpplens update` (wersje, JSON wydania, SHA-256, komunikat o aktualizacji) |
+| `CommandLineTests.cs` | opcje z jednym lub dwoma myślnikami, `--nazwa=wartość`, opcje przed argumentami, nieznane opcje i brak wartości jako błąd, `--` |
 
 Dodanie testu: włóż potrzebny XML do `Fixtures` (nazwy neutralne — `Demo*`, `Contoso*`), potem dopisz `[Fact]`
 w `QueryTests.cs`, który woła zapytanie i sprawdza tekst odpowiedzi. Uruchamiaj testy przed każdym commitem.

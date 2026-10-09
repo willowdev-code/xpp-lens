@@ -4,25 +4,20 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using XppLens;
 
-var cmd = args.Length > 0 ? args[0].ToLowerInvariant() : "help";
-var rest = args.Skip(1).ToList();
-
-string? Opt(string name)
+CommandLine line;
+try
 {
-    int i = rest.FindIndex(a => a.Equals("--" + name, StringComparison.OrdinalIgnoreCase));
-    if (i < 0 || i + 1 >= rest.Count) return null;
-    var v = rest[i + 1];
-    rest.RemoveRange(i, 2);
-    return v;
+    line = CommandLine.Parse(args);
 }
-
-bool Flag(string name)
+catch (ArgumentException ex)
 {
-    int i = rest.FindIndex(a => a.Equals("--" + name, StringComparison.OrdinalIgnoreCase));
-    if (i < 0) return false;
-    rest.RemoveAt(i);
-    return true;
+    Console.Error.WriteLine($"error: {ex.Message}");
+    return 2;
 }
+var cmd = line.Command;
+var rest = line.Positional;
+string? Opt(string name) => line.Opt(name);
+bool Flag(string name) => line.Flag(name);
 
 string Arg(int i) => i < rest.Count ? rest[i] : throw new ArgumentException($"missing argument #{i + 1} for '{cmd}'");
 
@@ -56,6 +51,8 @@ static void PrintTables(Func<TableStyle, string> render, bool ascii)
     }
 }
 
+Updater.RemoveLeftovers();
+
 if (cmd is "version" or "--version" or "-v")
 {
     Console.WriteLine($"xpp-lens {AppVersion()} — Copyright © 2026 WillowDev");
@@ -63,7 +60,7 @@ if (cmd is "version" or "--version" or "-v")
 }
 
 if (cmd == "update")
-    return await Updater.Run(install: Flag("install"));
+    return await Updater.Run(install: Flag("install"), restartClaude: Flag("restart-claude"));
 
 if (cmd == "migrate")
 {
@@ -280,8 +277,10 @@ if (cmd is "help" or "-h" or "--help")
                         (--std-only also switches indexStandard on when an installation was made without it)
           xpplens status [--counts] [--ascii]                    --counts: also count references and labels (slow on a cold disk)
                                                                  --ascii: frames from +-| (automatic when redirected)
-          xpplens update [--install]                             check GitHub for a newer release; --install downloads,
+          xpplens update [--install [--restart-claude]]          check GitHub for a newer release; --install downloads,
                                                                  verifies (SHA-256) and installs it, keeping settings and index
+                                                                 (Claude may stay open; --restart-claude restarts Claude Desktop
+                                                                 at the end without asking)
           xpplens stats [--days 7] [--top 10]                   tokens, time and empty answers of MCP calls
           xpplens find <query[;query…]> [--kind any|object|method|field] [--type t] [--model m] [--limit n]
           xpplens object <name[;name…]> [--type t] [--sections list] [--parent control] [--depth n] [--filter *text*]
@@ -305,6 +304,7 @@ if (cmd is "help" or "-h" or "--help")
           xpplens unregister [--desktop] [--code] [--any]             (--any: also other installations)
           xpplens version
 
+        options: --name value, --name=value or -name value; '--' ends the options (for an argument starting with '-')
         config: xpplens.json next to the executable or in a parent folder (or XPPLENS_CONFIG)
         """);
     return 0;

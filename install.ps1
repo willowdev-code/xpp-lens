@@ -19,6 +19,10 @@
     Running it again over an existing installation (an update) keeps its settings: languages and the
     PackagesLocalDirectory change only when you pass -Languages / -PackagesDir explicitly.
 
+    Claude may stay open: a running xpplens.exe is renamed to *.old instead of being stopped, so open sessions
+    keep working on the old version and new sessions start the new one. At the end the installer offers to
+    restart Claude Desktop (-RestartClaude: without asking).
+
     Upgrading from xpp-graft (the former name): the installer takes over its settings, moves its index
     and usage log to %LOCALAPPDATA%\xpp-lens without rebuilding (or keeps using the old index where it is
     when it cannot be moved), and removes its MCP entries. The old folder (-MigrateFrom, default
@@ -38,7 +42,8 @@ param(
     [switch]   $NoBuild,
     [switch]   $NoRegister,
     [switch]   $DesktopOnly,
-    [switch]   $CodeOnly
+    [switch]   $CodeOnly,
+    [switch]   $RestartClaude
 )
 
 $ErrorActionPreference = 'Stop'
@@ -83,21 +88,32 @@ if ($hadConfig -and -not $PackagesDir) {
 }
 
 Head "1/5 Copying files to $InstallDir"
-$target = [IO.Path]::GetFullPath($InstallDir).TrimEnd('\') + '\'
-Get-CimInstance Win32_Process -Filter "Name='xpplens.exe'" |
-    Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($target, [StringComparison]::OrdinalIgnoreCase) } |
-    ForEach-Object {
-        Say "stopping running xpplens process (PID $($_.ProcessId))"
-        Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
-    }
-New-Item -ItemType Directory -Force -Path (Join-Path $InstallDir 'bin') | Out-Null
+$binDst = Join-Path $InstallDir 'bin'
+New-Item -ItemType Directory -Force -Path $binDst | Out-Null
 $srcFull = (Resolve-Path $src).Path.TrimEnd('\')
 $dstFull = (Resolve-Path $InstallDir).Path.TrimEnd('\')
 if ($srcFull -ieq $dstFull) {
     Say "the package is already in the target folder - skipping copy"
 }
 else {
-    Copy-Item (Join-Path $src 'bin\*') (Join-Path $InstallDir 'bin') -Recurse -Force
+    # A running xpplens.exe (an open Claude session) cannot be overwritten, but it can be renamed: the session
+    # keeps running from the *.old file, new sessions start the new version, the next start deletes the leftover.
+    Get-ChildItem $binDst -Filter '*.old' | ForEach-Object { Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue }
+    foreach ($f in Get-ChildItem (Join-Path $src 'bin') -File) {
+        $dst = Join-Path $binDst $f.Name
+        if (Test-Path $dst) {
+            try {
+                Remove-Item $dst -Force -ErrorAction Stop
+            }
+            catch {
+                $oldName = "$($f.Name).$((Get-Date).ToString('yyyyMMddHHmmss')).old"
+                Rename-Item $dst $oldName
+                Say "$($f.Name) is in use by an open Claude session - renamed to $oldName"
+            }
+        }
+        Copy-Item $f.FullName $dst -Force
+    }
+    Get-ChildItem (Join-Path $src 'bin') -Directory | ForEach-Object { Copy-Item $_.FullName $binDst -Recurse -Force }
     foreach ($f in 'install.ps1', 'uninstall.ps1', 'README.md', 'README.pl.md', 'CHANGELOG.md', 'LICENSE') {
         if (Test-Path (Join-Path $src $f)) { Copy-Item (Join-Path $src $f) $InstallDir -Force }
     }
@@ -167,8 +183,43 @@ else {
 }
 
 Head "Done"
+$version = ([string](& $exe version)).Split(' ')[1]
+Say "installed xpp-lens $version"
 if ($migrated) { Say "The former folder $MigrateFrom is no longer used - delete it when you like." }
-Say "Quit and restart Claude Desktop; start Claude Code sessions again."
+
+# Claude Desktop starts xpplens.exe for its sessions: a restart moves all of them to the new version.
+# Only the Desktop app (MSIX or per-user install) - never Claude Code processes in terminals.
+$desktop = @(Get-Process -Name claude -ErrorAction SilentlyContinue |
+    Where-Object { $_.Path -match '\\WindowsApps\\Claude_|\\AnthropicClaude\\' })
+if ($desktop.Count -gt 0) {
+    $restart = [bool]$RestartClaude
+    $canAsk = [Environment]::UserInteractive -and $Host.Name -ne 'Default Host' -and
+        -not ([Environment]::GetCommandLineArgs() | Where-Object { $_ -like '-NonI*' })
+    if (-not $restart -and $canAsk) {
+        Write-Host ""
+        $answer = Read-Host "  Claude Desktop is running. Restart it now so all its sessions use $version? Work in progress there is interrupted. [y/N]"
+        $restart = $answer -match '^\s*(y|yes|t|tak)\s*$'
+    }
+    if ($restart) {
+        $appPath = $desktop[0].Path
+        $desktop | Stop-Process -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 2
+        if ($appPath -match '\\WindowsApps\\') {
+            # Store / MSIX app: started through its application id, not the exe path.
+            $pkg = Get-AppxPackage | Where-Object { $_.InstallLocation -and $appPath.StartsWith($_.InstallLocation, [StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1
+            $appId = @((Get-AppxPackageManifest $pkg).Package.Applications.Application)[0].Id
+            Start-Process "shell:AppsFolder\$($pkg.PackageFamilyName)!$appId"
+        }
+        else {
+            Start-Process $appPath
+        }
+        Say "Claude Desktop restarted."
+    }
+    else {
+        Say "Claude Desktop: open sessions keep the old version until it is restarted; new sessions use $version."
+    }
+}
+Say "Claude Code in a terminal / VS Code: '/mcp' -> reconnect xpp-lens, or start a new session."
 Say "Change settings later:  `"$exe`" config --add-language de --add-full-model XPL"
 Say "Index status:           `"$exe`" status"
 Say "Uninstall:              $InstallDir\uninstall.ps1"

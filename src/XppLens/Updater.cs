@@ -99,6 +99,32 @@ public static class Updater
         return Convert.ToHexString(SHA256.HashData(fs)).ToLowerInvariant();
     }
 
+    /// <summary>
+    /// The installer renames a running xpplens.exe to *.old (Windows lets a running program be renamed, not replaced);
+    /// the next start removes those that are no longer in use.
+    /// </summary>
+    public static void RemoveLeftovers()
+    {
+        try
+        {
+            foreach (var f in Directory.EnumerateFiles(AppContext.BaseDirectory, "*.old"))
+            {
+                try
+                {
+                    File.Delete(f);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    // still running in an older Claude session
+                }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // read-only installation folder
+        }
+    }
+
     /// <summary>The installation folder of the running program: the parent of its 'bin' folder.</summary>
     public static string InstallDir()
     {
@@ -106,7 +132,8 @@ public static class Updater
         return bin.Name.Equals("bin", StringComparison.OrdinalIgnoreCase) && bin.Parent != null ? bin.Parent.FullName : bin.FullName;
     }
 
-    public static async Task<int> Run(bool install)
+    /// <param name="restartClaude">Passed to the installer: restart Claude Desktop when done, without asking.</param>
+    public static async Task<int> Run(bool install, bool restartClaude = false)
     {
         using var http = Client();
         ReleaseInfo? latest;
@@ -141,7 +168,7 @@ public static class Updater
                 Console.WriteLine("\nchanges:");
                 foreach (var l in notes) Console.WriteLine("  " + l.Trim());
             }
-            Console.WriteLine("\ninstall it with: xpplens update --install   (close Claude first; your settings and index are kept)");
+            Console.WriteLine("\ninstall it with: xpplens update --install   (Claude may stay open; your settings and index are kept)");
             return 0;
         }
 
@@ -187,11 +214,14 @@ public static class Updater
         Process.Start(new ProcessStartInfo
         {
             FileName = "powershell.exe",
-            Arguments = $"-NoProfile -ExecutionPolicy Bypass -NoExit -File \"{script}\" -InstallDir \"{target}\"",
+            Arguments = $"-NoProfile -ExecutionPolicy Bypass -NoExit -File \"{script}\" -InstallDir \"{target}\"" + (restartClaude ? " -RestartClaude" : ""),
             UseShellExecute = true,
             WorkingDirectory = Path.GetDirectoryName(script)!,
         });
-        Console.WriteLine($"the installer continues in a new window (target {target}); restart Claude when it is done.");
+        Console.WriteLine($"the installer continues in a new window (target {target}).");
+        Console.WriteLine(restartClaude
+            ? "Claude Desktop is restarted when it is done."
+            : "At the end it offers to restart Claude Desktop; otherwise running sessions keep the old version until restarted.");
         return 0;
     }
 }

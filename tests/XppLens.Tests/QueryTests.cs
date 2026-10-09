@@ -268,6 +268,24 @@ public class QueryTests(IndexFixture fx)
     }
 
     [Fact]
+    public void Grep_takes_several_object_names()
+    {
+        var both = Q.Grep(@"\(", null, null, "ContosoHelper;ContosoInvoice*", false, 200);
+        Assert.Contains("ContosoHelper", both);
+        Assert.Contains("ContosoInvoiceService", both);
+        Assert.DoesNotContain("ContosoEventHandlers", both);
+        Assert.DoesNotContain("ContosoInvoiceService", Q.Grep(@"\(", null, null, "ContosoHelper", false, 200));
+    }
+
+    [Fact]
+    public void Standard_grep_without_scope_points_to_refs()
+    {
+        var res = Q.Grep("DemoCustomer::find", null, null, null, true, 10);
+        Assert.Contains("pass model", res);
+        Assert.Contains("xpp_callers objectName=DemoCustomer method=find", res);
+    }
+
+    [Fact]
     public void Labels_resolve_and_search()
     {
         Assert.Contains("en-US: Credit limit", Q.Label("@DemoLabels:CreditLimit", null, 30));
