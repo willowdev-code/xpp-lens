@@ -83,6 +83,23 @@ public sealed partial class Queries(IndexService svc)
         return "(" + string.Join(" OR ", parts) + ")";
     }
 
+    /// <summary>
+    /// Condition for a wildcard / substring name search. With the names in memory (MCP server) it becomes an exact
+    /// list the index answers at once; otherwise LIKE, which reads the whole table.
+    /// </summary>
+    static string AddLike(string column, string pattern, string param, List<(string, object?)> args)
+    {
+        args.Add((param, Like(pattern)));
+        return $"{column} LIKE {param} ESCAPE '!'";
+    }
+
+    string NameFilter(string column, NameDirectory.Kind kind, string pattern, string param, List<(string, object?)> args)
+    {
+        if (svc.MatchNames(kind, pattern) is not { } names) return AddLike(column, pattern, param, args);
+        if (CallTiming.Current is { } t) t.NamesInMemory = true;
+        return names.Count == 0 ? "0" : $"{column} IN ({InList(param + "_", names.Cast<object?>().ToList(), args)})";
+    }
+
     static string Trunc(string? s, int max) => s == null ? "" : s.Length <= max ? s : s[..max] + "…";
 
     string Finish(StringBuilder sb)
@@ -150,8 +167,10 @@ public sealed partial class Queries(IndexService svc)
     string NotFound(Store s, string name, string? type)
     {
         var tp = TypePattern(type);
-        var similar = s.Query($"{ObjSelect} WHERE o.name LIKE $l ESCAPE '!' {(tp != null ? "AND o.type LIKE $tp" : "")} ORDER BY md.tier DESC, length(o.name) LIMIT 12",
-            ("$l", $"%{Esc(name)}%"), ("$tp", tp)).Select(r => ReadObj(r)).ToList();
+        var args = new List<(string, object?)> { ("$tp", tp) };
+        var cond = NameFilter("o.name", NameDirectory.Kind.Object, name.Replace("*", "").Replace("?", ""), "$l", args);
+        var similar = s.Query($"{ObjSelect} WHERE {cond} {(tp != null ? "AND o.type LIKE $tp" : "")} ORDER BY md.tier DESC, length(o.name) LIMIT 12",
+            [.. args]).Select(r => ReadObj(r)).ToList();
         var sb = new StringBuilder($"No object named '{name}'{(tp != null ? $" of type {tp}" : "")}.");
         if (similar.Count > 0)
         {
@@ -188,10 +207,84 @@ public sealed partial class Queries(IndexService svc)
 
     // ---------------------------------------------------------------- find
 
-    public string Find(string query, string? kind, string? type, string? model, int limit) =>
-        Batch(SplitList(query).Select(q => (q, (Func<string>)(() => FindOne(q, kind, type, model, limit)))).ToList() is { Count: > 0 } items
-            ? items
-            : [(query, () => "nothing found (empty query)")]);
+    /// <param name="property">List these root properties of the found objects instead ("A;B", or "A=*pattern*" to filter).</param>
+    public string Find(string query, string? kind, string? type, string? model, int limit, string? property = null) =>
+        !string.IsNullOrWhiteSpace(property)
+            ? ListProperties(query, type, model, property, limit)
+            : Batch(SplitList(query).Select(q => (q, (Func<string>)(() => FindOne(q, kind, type, model, limit)))).ToList() is { Count: > 0 } items
+                ? items
+                : [(query, () => "nothing found (empty query)")]);
+
+    /// <summary>"Key=Value; Key2=Value2" as stored in objects.props.</summary>
+    internal static Dictionary<string, string> ParseProps(string? props)
+    {
+        var d = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrEmpty(props)) return d;
+        foreach (var part in props.Split("; ", StringSplitOptions.RemoveEmptyEntries))
+            if (part.IndexOf('=') is > 0 and var eq) d.TryAdd(part[..eq], part[(eq + 1)..]);
+        return d;
+    }
+
+    /// <summary>
+    /// One or more root properties (PublicEntityName, TableGroup, Label…) of every object matching the name, type and
+    /// model filters — answered from the properties stored in the index, without reading XML.
+    /// </summary>
+    string ListProperties(string query, string? type, string? model, string property, int limit) => svc.Read(s =>
+    {
+        limit = Math.Clamp(limit, 1, 2000);
+        // "PublicEntityName;PublicCollectionName" or "PublicEntityName=*Order*" (a value filter, wildcards allowed).
+        var wanted = SplitList(property).Select(p =>
+        {
+            int eq = p.IndexOf('=');
+            return eq > 0 ? (Name: p[..eq].Trim(), Filter: NameDirectory.WholeName(p[(eq + 1)..].Trim())) : (Name: p.Trim(), Filter: (Regex?)null);
+        }).ToList();
+        var tp = TypePattern(type);
+        var args = new List<(string, object?)> { ("$tp", tp), ("$model", PatOrNull(model)) };
+        var names = SplitList(query).Where(q => q.Trim('*').Length > 0).ToList();
+        if (names.Count == 0 && tp == null && string.IsNullOrWhiteSpace(model))
+            return "listing properties needs a scope: a name pattern, type (e.g. entity) or model.";
+        var nameSql = names.Count == 0 ? "1=1"
+            : "(" + string.Join(" OR ", names.Select((q, i) => NameFilter("o.name", NameDirectory.Kind.Object, q, $"$n{i}", args))) + ")";
+        // Models first: with a model filter the index walks only that model's files.
+        var rows = s.Query($"""
+            SELECT o.id, o.file_id, o.type, o.name, o.target, o.extends, o.header, o.props, f.path, md.package, md.name, md.tier
+            FROM models md JOIN files f ON f.model_id = md.id JOIN objects o ON o.file_id = f.id
+            WHERE ($model IS NULL OR md.name LIKE $model ESCAPE '!' OR md.package LIKE $model ESCAPE '!')
+              AND {nameSql} {(tp != null ? "AND o.type LIKE $tp" : "")}
+            ORDER BY md.tier DESC, o.type, o.name
+            """, [.. args]).Select(r => ReadObj(r)).ToList();
+
+        var sb = new StringBuilder();
+        int shown = 0, matched = 0;
+        foreach (var o in rows)
+        {
+            var props = ParseProps(o.Props);
+            // The stored list is cut at 1000 characters: a property missing from a long list is read from the file.
+            if (o.Props is { Length: >= 990 } && !o.Compiled && wanted.Any(w => !props.ContainsKey(w.Name)))
+            {
+                try
+                {
+                    foreach (var kv in XmlObjectParser.Parse(o.Path, ParseMode.Standard).RootProps) props.TryAdd(kv.Key, kv.Value);
+                }
+                catch (Exception ex)
+                {
+                    Log.Debug($"props {o.Path}: {ex.Message}");
+                }
+            }
+            if (wanted.Any(w => w.Filter != null && !(props.TryGetValue(w.Name, out var v) && w.Filter.IsMatch(v)))) continue;
+            matched++;
+            if (shown >= limit) continue;
+            shown++;
+            sb.AppendLine($"  {o.Type} {o.Name} {o.Tag}  " +
+                          string.Join("; ", wanted.Select(w => $"{w.Name}={(props.TryGetValue(w.Name, out var v) ? v : "-")}")));
+        }
+        var header = $"{matched} object(s){(tp != null ? $" of type {tp}" : "")}{(model != null ? $" in {model}" : "")} — {string.Join(", ", wanted.Select(w => w.Name))}:";
+        if (matched == 0) return Finish(new StringBuilder($"nothing found: no object{(tp != null ? $" of type {tp}" : "")} matches with those property values."));
+        sb.Insert(0, header + "\n");
+        if (matched > shown) sb.AppendLine($"… {matched - shown} more (raise limit)");
+        sb.AppendLine("(\"-\" = property not set)");
+        return Finish(sb);
+    });
 
     string FindOne(string query, string? kind, string? type, string? model, int limit) => svc.Read(s =>
     {
@@ -229,12 +322,14 @@ public sealed partial class Queries(IndexService svc)
 
         if (objectQuery != null)
         {
+            var args = new List<(string, object?)> { ("$tp", tp), ("$q", objectQuery), ("$qprefix", Esc(objectQuery) + "%"), ("$model", modelLike), ("$limit", limit) };
+            var cond = NameFilter("o.name", NameDirectory.Kind.Object, objectQuery, "$like", args);
             var rows = s.Query($"""
                 {ObjSelect}
-                WHERE o.name LIKE $like ESCAPE '!' {(tp != null ? "AND o.type LIKE $tp" : "")} {modelFilter}
+                WHERE {cond} {(tp != null ? "AND o.type LIKE $tp" : "")} {modelFilter}
                 ORDER BY CASE WHEN o.name = $q THEN 0 WHEN o.name LIKE $qprefix ESCAPE '!' THEN 1 ELSE 2 END, md.tier DESC, {TypePriority}, length(o.name), o.name
                 LIMIT $limit
-                """, ("$like", Like(objectQuery)), ("$tp", tp), ("$q", objectQuery), ("$qprefix", Esc(objectQuery) + "%"), ("$model", modelLike), ("$limit", limit))
+                """, [.. args])
                 .Select(r => ReadObj(r)).ToList();
             if (rows.Count > 0 || memPart == null)
             {
@@ -251,16 +346,19 @@ public sealed partial class Queries(IndexService svc)
 
         if (methodName != null && kind is "any" or "method" or "member")
         {
-            var mCond = exactOnly ? "m.name = $mq" : "m.name LIKE $mlike ESCAPE '!'";
+            var args = new List<(string, object?)> { ("$mq", methodName), ("$olike", PatOrNull(ownerName)), ("$oq", ownerName), ("$tp", tp), ("$model", modelLike), ("$limit", limit) };
+            // A known owner narrows the search through the index already; only an open name search needs the name list.
+            var mCond = exactOnly ? "m.name = $mq"
+                : ownerName != null && !HasWildcard(ownerName) ? AddLike("m.name", methodName, "$mlike", args)
+                : NameFilter("m.name", NameDirectory.Kind.Method, methodName, "$mlike", args);
             var oCond = ownerName == null ? "" : HasWildcard(ownerName) ? "AND o.name LIKE $olike ESCAPE '!'" : "AND o.name = $oq";
             var rows = s.Query($"""
                 SELECT o.type, o.name, m.owner, m.name, m.sig, m.start_line, md.package, md.name, md.tier
                 FROM methods m JOIN objects o ON o.id = m.object_id JOIN files f ON f.id = m.file_id JOIN models md ON md.id = f.model_id
                 WHERE {mCond} {oCond} {(tp != null ? "AND o.type LIKE $tp" : "")} {modelFilter} AND m.name <> 'classDeclaration'
-                ORDER BY CASE WHEN m.name = $mq THEN 0 ELSE 1 END, md.tier DESC, {TypePriority}, o.name
+                ORDER BY CASE WHEN m.name = $mq THEN 0 ELSE 1 END, md.tier DESC, {TypePriority}, o.name, m.name, m.owner
                 LIMIT $limit
-                """, ("$mq", methodName), ("$mlike", Like(methodName)), ("$olike", PatOrNull(ownerName)),
-                ("$oq", ownerName), ("$tp", tp), ("$model", modelLike), ("$limit", limit))
+                """, [.. args])
                 .Select(r => (Type: r.GetString(0), Obj: r.GetString(1), Owner: N(r, 2), Name: r.GetString(3), Sig: N(r, 4),
                     Line: r.GetInt32(5), Tag: Tag(r.GetString(6), r.GetString(7), r.GetInt32(8)))).ToList();
             if (rows.Count > 0 || (kind != "any" && !(dotted && !kindGiven)))
@@ -273,17 +371,19 @@ public sealed partial class Queries(IndexService svc)
 
         if (methodName != null && kind is "any" or "field" or "member")
         {
-            var mCond = exactOnly ? "mb.name = $mq" : "mb.name LIKE $mlike ESCAPE '!'";
+            var args = new List<(string, object?)> { ("$mq", methodName), ("$olike", PatOrNull(ownerName)), ("$oq", ownerName), ("$tp", tp), ("$model", modelLike), ("$limit", limit) };
+            var mCond = exactOnly ? "mb.name = $mq"
+                : ownerName != null && !HasWildcard(ownerName) ? AddLike("mb.name", methodName, "$mlike", args)
+                : NameFilter("mb.name", NameDirectory.Kind.Member, methodName, "$mlike", args);
             var oCond = ownerName == null ? "" : HasWildcard(ownerName) ? "AND o.name LIKE $olike ESCAPE '!'" : "AND o.name = $oq";
             var rows = s.Query($"""
                 SELECT o.type, o.name, mb.kind, mb.name, mb.info, md.package, md.name, md.tier
                 FROM members mb JOIN objects o ON o.id = mb.object_id JOIN files f ON f.id = mb.file_id JOIN models md ON md.id = f.model_id
                 WHERE {mCond} {oCond} AND mb.kind IN ('field','enumvalue','datasource','index','relation','fieldgroup','control')
                 {(tp != null ? "AND o.type LIKE $tp" : "")} {modelFilter}
-                ORDER BY CASE WHEN mb.name = $mq THEN 0 ELSE 1 END, md.tier DESC, {TypePriority}, o.name
+                ORDER BY CASE WHEN mb.name = $mq THEN 0 ELSE 1 END, md.tier DESC, {TypePriority}, o.name, mb.kind, mb.name
                 LIMIT $limit
-                """, ("$mq", methodName), ("$mlike", Like(methodName)), ("$olike", PatOrNull(ownerName)),
-                ("$oq", ownerName), ("$tp", tp), ("$model", modelLike), ("$limit", limit))
+                """, [.. args])
                 .Select(r => $"  {r.GetString(0)} {r.GetString(1)}.{r.GetString(3)} ({r.GetString(2)}) {Tag(r.GetString(5), r.GetString(6), r.GetInt32(7))}  {Trunc(N(r, 4), 120)}")
                 .ToList();
             if (rows.Count > 0 || (kind != "any" && !(dotted && !kindGiven)))

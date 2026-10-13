@@ -3,6 +3,28 @@
 All notable changes to xpp-lens (called xpp-graft up to 1.2.0). Versions follow `<Version>` in
 `src/XppLens/XppLens.csproj`; release tags are `vX.Y.Z`.
 
+## 1.2.6 — 2026-10-13
+
+### Changed
+- Faster answers, mostly after a pause, when the OS has dropped the index from its file cache and the disk is
+  slow. Measured on a real installation before / after: a substring search (`xpp_find *Text*`) right after the server starts 41 s → 1 s,
+  later 1.3 s → 0.2 s; earlier usage logs showed single calls of 100–180 s.
+  - Queries run in parallel, each on its own connection: one slow query no longer holds up the others (they used
+    to finish together, all waiting for the first one).
+  - The periodic rescan of custom model files runs on a timer in the MCP server instead of inside a query; files
+    changed on disk (seen by the watchers) are still indexed before the next query.
+  - Wildcard and substring name searches (`xpp_find *Invoice*`, "Similar" suggestions) are matched against the
+    distinct names of objects, methods and members kept in memory (about 730 000 names, read in under a second at
+    start and after index changes); the index then answers only exact names instead of scanning whole tables.
+  - Results of `xpp_find` are ordered completely (ties broken by name), so the same question gives the same answer.
+
+### Added
+- `xpp_find property=…` lists root properties of every object matching the name, type and model filters, from the
+  index: `query="*" type=entity model=Contoso property="PublicEntityName;PublicCollectionName"`;
+  `property="PublicEntityName=*Order*"` filters by value (`xpplens find "*" --type entity --property …`).
+- The usage log records, per call, the time spent waiting for the index refresh and the query time;
+  `xpplens stats` shows them (`p95 wait`, `p95 query`, and per slowest call). `status` shows the names held in memory.
+
 ## 1.2.5 — 2026-10-09
 
 ### Changed

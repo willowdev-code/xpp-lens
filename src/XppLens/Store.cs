@@ -12,7 +12,17 @@ public sealed class Store : IDisposable
     /// <summary>True when the index cannot be written (file/folder permissions) — refresh is then skipped.</summary>
     public bool ReadOnly { get; private set; }
 
-    public Store(string path)
+    public Store(string path) : this(path, reader: false)
+    {
+    }
+
+    /// <summary>
+    /// A connection for queries running next to others: no schema work, a smaller page cache (the index is
+    /// memory-mapped, so pages are shared through the OS cache). WAL lets readers run in parallel with a writer.
+    /// </summary>
+    public static Store OpenReader(string path) => new(path, reader: true);
+
+    Store(string path, bool reader)
     {
         Path = path;
         Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
@@ -26,6 +36,11 @@ public sealed class Store : IDisposable
         }.ToString();
         Conn = new SqliteConnection(cs);
         Conn.Open();
+        if (reader)
+        {
+            Exec("PRAGMA busy_timeout=120000; PRAGMA temp_store=MEMORY; PRAGMA cache_size=-65536; PRAGMA mmap_size=2147483648;");
+            return;
+        }
         // journal_size_limit: after a big rebuild the WAL file is cut back to 64 MB at the next checkpoint
         // instead of keeping its peak size on disk while MCP servers hold the database open.
         Exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA busy_timeout=120000; PRAGMA temp_store=MEMORY; " +

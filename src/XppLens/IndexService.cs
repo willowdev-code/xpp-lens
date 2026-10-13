@@ -24,7 +24,26 @@ public sealed class IndexService : IDisposable
     int _lastChangeCount;
 
     public string BackgroundStatus { get; private set; } = "idle";
-    public string LastRefreshNote { get; private set; } = "";
+
+    [ThreadStatic] static string? _refreshNote;
+
+    /// <summary>Note of the refresh done for the read running on this thread ("[index refreshed: …]").</summary>
+    public string LastRefreshNote => _refreshNote ?? "";
+
+    /// <summary>Names for wildcard searches, kept in memory by the MCP server (see <see cref="StartBackground"/>).</summary>
+    public NameDirectory Names { get; } = new();
+
+    // Queries run on their own connections, so a slow one (cold disk) does not hold up the others.
+    readonly System.Collections.Concurrent.ConcurrentBag<Store> _readers = [];
+    const int MaxIdleReaders = 4;
+
+    // MCP server: the periodic rescan runs on a timer instead of inside a query.
+    Timer? _rescanTimer;
+    bool _background;
+    // The MCP server reads the model catalog in the background; queries wait for it (it used to be the lock).
+    readonly ManualResetEventSlim _catalogReady = new(false);
+    int _namesBuilding;
+    bool _disposed;
 
     public IndexService(Config cfg)
     {
@@ -38,8 +57,14 @@ public sealed class IndexService : IDisposable
 
     public void Dispose()
     {
+        _disposed = true;
+        _rescanTimer?.Dispose();
         foreach (var w in _watchers) w.Dispose();
-        _store.Dispose();
+        lock (_gate)
+        {
+            while (_readers.TryTake(out var r)) r.Dispose();
+            _store.Dispose();
+        }
         _mutex.Dispose();
     }
 
@@ -54,6 +79,7 @@ public sealed class IndexService : IDisposable
                 foreach (var m in Models)
                     if (_store.Scalar("SELECT id FROM models WHERE package=$p AND name=$n", ("$p", m.Package), ("$n", m.Name)) is { } id)
                         m.Id = Convert.ToInt64(id);
+                _catalogReady.Set();
                 return;
             }
             var existing = new Dictionary<string, (long Id, int Tier)>(StringComparer.OrdinalIgnoreCase);
@@ -81,6 +107,7 @@ public sealed class IndexService : IDisposable
             }
             _analyzerStale = _store.GetMeta("analyzer") != Indexer.AnalyzerVersion.ToString();
             _needScan = true;
+            _catalogReady.Set();
         }
     }
 
@@ -228,9 +255,14 @@ public sealed class IndexService : IDisposable
         else if (!Path.HasExtension(path)) _needScan = true;
     }
 
-    /// <summary>Background work at MCP start: catalog, watchers, first freshness pass, standard fingerprints.</summary>
+    /// <summary>
+    /// Background work at MCP start: catalog, watchers, first freshness pass, the in-memory names, standard
+    /// fingerprints; then a rescan every <see cref="Config.RescanIntervalSeconds"/> on a timer, outside the queries.
+    /// </summary>
     public void StartBackground(bool syncCatalog = false)
     {
+        _background = true;
+        _namesExpected = true;
         Task.Run(() =>
         {
             try
@@ -242,24 +274,160 @@ public sealed class IndexService : IDisposable
                     StartWatching();
                 }
                 BackgroundStatus = "checking custom models";
-                lock (_gate) LastRefreshNote = RefreshLocked();
-                if (Cfg.IndexStandard) SyncStandardTier(force: false, skipIfBusy: true);
+                lock (_gate) RefreshLocked(full: true);
+                BackgroundStatus = "reading names";
+                BuildNames();
+                BackgroundStatus = "idle";
+                if (Cfg.IndexStandard && SyncStandardTier(force: false, skipIfBusy: true).Changed > 0) IndexChanged();
             }
             catch (Exception ex)
             {
                 BackgroundStatus = "error: " + ex.Message;
                 Log.Warn($"background: {ex}");
+                // Queries must not wait for what will not come.
+                _catalogReady.Set();
+                if (!Names.Ready && Volatile.Read(ref _namesBuilding) == 0) _namesExpected = false;
             }
+            var every = TimeSpan.FromSeconds(Math.Max(30, Cfg.RescanIntervalSeconds));
+            _rescanTimer = new Timer(_ => Rescan(), null, every, every);
         });
     }
 
-    /// <summary>Runs a read against a fresh index. All reads are serialized in-process.</summary>
+    void Rescan()
+    {
+        if (_disposed || !Monitor.TryEnter(_gate)) return;
+        try
+        {
+            RefreshLocked(full: true);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"rescan: {ex.Message}");
+        }
+        finally
+        {
+            Monitor.Exit(_gate);
+        }
+    }
+
+    /// <summary>Reads the names for wildcard searches on a reader connection (one build at a time).</summary>
+    internal void BuildNames()
+    {
+        if (Interlocked.Exchange(ref _namesBuilding, 1) == 1) return;
+        bool failed = false;
+        Store? s = null;
+        try
+        {
+            s = RentReader();
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            Names.Build(s);
+            Log.Debug($"names: {Names.Count} in {sw.ElapsedMilliseconds} ms");
+        }
+        catch (Exception ex)
+        {
+            failed = true;
+            Log.Warn($"names: {ex.Message}");
+        }
+        finally
+        {
+            if (s != null) ReturnReader(s);
+            Volatile.Write(ref _namesBuilding, 0);
+            // Invalidated while reading (the result was dropped): read once more. After an error searches use LIKE.
+            if (!failed && _background && !Names.Ready && !_disposed) Task.Run(BuildNames);
+            else _namesExpected = false;
+        }
+    }
+
+    /// <summary>The index changed: wildcard searches wait for the names to be read again in the background.</summary>
+    void IndexChanged()
+    {
+        if (!_background) return;
+        _namesExpected = true;
+        Names.Invalidate();
+        Task.Run(BuildNames);
+    }
+
+    // True while the MCP server is (re)reading the names: reading the name indexes is always cheaper than a LIKE
+    // over the whole tables, so a wildcard search waits for it instead of scanning.
+    volatile bool _namesExpected;
+
+    /// <summary>Names matching a wildcard / substring pattern, or null when the search must use LIKE.</summary>
+    public List<string>? MatchNames(NameDirectory.Kind kind, string pattern)
+    {
+        if (!Names.Ready && _namesExpected)
+        {
+            var wait = System.Diagnostics.Stopwatch.StartNew();
+            while (!Names.Ready && _namesExpected && wait.Elapsed < TimeSpan.FromMinutes(2)) Thread.Sleep(25);
+            CallTiming.AddWait(wait);
+        }
+        return Names.Match(kind, pattern);
+    }
+
+    Store RentReader() => _readers.TryTake(out var s) ? s : Store.OpenReader(Cfg.IndexPath);
+
+    void ReturnReader(Store s)
+    {
+        if (!_disposed && _readers.Count < MaxIdleReaders) _readers.Add(s);
+        else s.Dispose();
+    }
+
+    /// <summary>How long a query waits for a refresh another thread is doing before it reads without it.</summary>
+    static readonly TimeSpan RefreshWait = TimeSpan.FromSeconds(3);
+
+    /// <summary>
+    /// Runs a read against a fresh index. Files changed on disk (seen by the watchers) are indexed first; in the CLI,
+    /// where no timer runs, also the periodic rescan. Reads run in parallel on their own connections.
+    /// </summary>
     public T Read<T>(Func<Store, T> read)
     {
-        lock (_gate)
+        _refreshNote = "";
+        if (_background && !_catalogReady.IsSet)
         {
-            LastRefreshNote = RefreshLocked();
-            return read(_store);
+            var start = System.Diagnostics.Stopwatch.StartNew();
+            _catalogReady.Wait(TimeSpan.FromMinutes(2));
+            CallTiming.AddWait(start);
+        }
+        bool due = !_dirty.IsEmpty || (!_background && (_needScan || DateTime.UtcNow - _lastScanUtc > TimeSpan.FromSeconds(Cfg.RescanIntervalSeconds)));
+        if (due && !_store.ReadOnly)
+        {
+            var wait = System.Diagnostics.Stopwatch.StartNew();
+            if (Monitor.TryEnter(_gate, RefreshWait))
+            {
+                CallTiming.AddWait(wait);
+                var refresh = System.Diagnostics.Stopwatch.StartNew();
+                try
+                {
+                    _refreshNote = RefreshLocked(full: !_background);
+                }
+                finally
+                {
+                    Monitor.Exit(_gate);
+                    CallTiming.AddRefresh(refresh);
+                }
+            }
+            else
+            {
+                CallTiming.AddWait(wait);
+                _refreshNote = "[index is being refreshed in the background — files changed in the last moments may not be in this answer yet]";
+            }
+        }
+        else if (_store.ReadOnly)
+        {
+            _refreshNote = ReadOnlyNote;
+        }
+        else if (_background && _lastScanUtc == DateTime.MinValue)
+        {
+            _refreshNote = "[the server has just started and is still checking custom models for changes — files changed while it was not running may be missing for a moment]";
+        }
+
+        var s = RentReader();
+        try
+        {
+            return read(s);
+        }
+        finally
+        {
+            ReturnReader(s);
         }
     }
 
@@ -270,12 +438,13 @@ public sealed class IndexService : IDisposable
         $"Fix: run 'xpplens config --index-path %LOCALAPPDATA%\\xpp-lens\\index\\xpp.db' and 'xpplens build' as the user running Claude, " +
         "or grant that user write access to the index folder.]";
 
-    string RefreshLocked()
+    /// <param name="full">Also the periodic rescan of all custom model files when it is due (or forced by a watcher error).</param>
+    string RefreshLocked(bool full)
     {
         if (_store.ReadOnly) return ReadOnlyNote;
         try
         {
-            if (_needScan || DateTime.UtcNow - _lastScanUtc > TimeSpan.FromSeconds(Cfg.RescanIntervalSeconds))
+            if (full && (_needScan || DateTime.UtcNow - _lastScanUtc > TimeSpan.FromSeconds(Cfg.RescanIntervalSeconds)))
             {
                 _dirty.Clear();
                 var total = new SyncStats();
@@ -284,7 +453,7 @@ public sealed class IndexService : IDisposable
                 MarkAnalyzerCurrent();
                 _lastScanUtc = DateTime.UtcNow;
                 _needScan = false;
-                if (total.Changed > 0) { _lastChangeUtc = DateTime.UtcNow; _lastChangeCount = total.Changed; }
+                if (total.Changed > 0) { _lastChangeUtc = DateTime.UtcNow; _lastChangeCount = total.Changed; IndexChanged(); }
                 return total.Changed > 0 ? $"[index refreshed: {total.Changed} changed file(s)]" : "";
             }
             if (!_dirty.IsEmpty)
@@ -292,7 +461,7 @@ public sealed class IndexService : IDisposable
                 var paths = _dirty.Keys.ToList();
                 foreach (var p in paths) _dirty.TryRemove(p, out _);
                 var n = _indexer.ReindexPaths(_store, paths, Models, WriteLock);
-                if (n > 0) { _lastChangeUtc = DateTime.UtcNow; _lastChangeCount = n; }
+                if (n > 0) { _lastChangeUtc = DateTime.UtcNow; _lastChangeCount = n; IndexChanged(); }
                 return n > 0 ? $"[index refreshed: {n} changed file(s)]" : "";
             }
         }
@@ -307,8 +476,9 @@ public sealed class IndexService : IDisposable
     /// <summary>Called by queries that are about to read a file directly: re-index it if it changed on disk.</summary>
     public bool EnsureFileFresh(Store s, string path)
     {
-        if (s.ReadOnly) return false;
+        if (_store.ReadOnly) return false;
         var n = _indexer.ReindexPaths(s, [path], Models, WriteLock);
+        if (n > 0) IndexChanged();
         return n > 0;
     }
 
@@ -374,6 +544,10 @@ public sealed class IndexService : IDisposable
             sb.AppendLine($"watchers: {_watchers.Count}, last full-tier scan: {(_lastScanUtc == DateTime.MinValue ? "never" : _lastScanUtc.ToLocalTime().ToString("HH:mm:ss"))}, " +
                           $"last change: {(_lastChangeUtc == DateTime.MinValue ? "-" : $"{_lastChangeUtc.ToLocalTime():HH:mm:ss} ({_lastChangeCount} files)")}");
             sb.AppendLine($"background: {BackgroundStatus}");
+            if (_background)
+                sb.AppendLine(Names.Ready
+                    ? $"names in memory: {TextTable.Num(Names.Count)} (wildcard searches without scanning the index)"
+                    : "names in memory: being read");
             sb.AppendLine();
 
             var full = Models.Where(m => m.Full).Select(m => m.Package == m.Name ? m.Name : $"{m.Package}/{m.Name}").ToList();

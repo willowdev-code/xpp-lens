@@ -244,6 +244,50 @@ public class HelperTests
     }
 
     [Fact]
+    public void Name_patterns_match_whole_names_like_the_index()
+    {
+        bool M(string pattern, string name) => NameDirectory.PatternRegex(pattern).IsMatch("\n" + name + "\n");
+        Assert.True(M("invoice", "ContosoInvoiceLine"));          // plain text: anywhere, any case
+        Assert.True(M("*Invoice*", "ContosoInvoiceLine"));
+        Assert.False(M("Invoice*", "ContosoInvoiceLine"));        // wildcards anchor at both ends
+        Assert.True(M("Contoso*Line", "ContosoInvoiceLine"));
+        Assert.True(M("Cust?able", "CustTable"));
+        Assert.False(M("Address_Ext", "AddressXExt"));       // '_' is a literal, not a wildcard
+        Assert.True(M("Sales.Line", "Sales.Line"));          // regex characters are literals
+        Assert.False(M("Sales.Line", "SalesXLine"));
+        Assert.Equal(["CustTable", "VendTable"],
+            NameDirectory.PatternRegex("*Table").Matches("\nCustTable\nCustTrans\nVendTable\n").Select(m => m.Value));
+    }
+
+    [Fact]
+    public void Usage_log_keeps_the_time_breakdown()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "xpplens-usage-" + Guid.NewGuid().ToString("N")[..8]);
+        Environment.SetEnvironmentVariable("XPPLENS_USAGE_DIR", dir);
+        var enabled = Usage.Enabled;
+        try
+        {
+            Usage.Enabled = true;
+            var timing = new CallTiming { WaitMs = 900, RefreshMs = 100 };
+            Usage.Record("xpp_find", new { query = "A" }, "objects (1):", 1500, false, timing);
+            Usage.Record("xpp_find", new { query = "B" }, "objects (1):", 20, false);
+            var all = Usage.Load(DateTime.UtcNow.AddMinutes(-5));
+            Assert.Equal(900, all[0].WaitMs);
+            Assert.Equal(500, all[0].QueryMs);
+            Assert.Null(all[1].QueryMs);
+            var report = Usage.Report(1, 5);
+            Assert.Contains("p95 wait", report);
+            Assert.Contains("1,500 ms (wait 1,000, query 500)", report.Replace(' ', ','));
+        }
+        finally
+        {
+            Usage.Enabled = enabled;
+            Environment.SetEnvironmentVariable("XPPLENS_USAGE_DIR", null);
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
     public void Text_tables_in_three_styles()
     {
         Assert.Equal("188 835", TextTable.Num(188835));

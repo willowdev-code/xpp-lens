@@ -11,7 +11,8 @@ public static class McpTools
     public const string Instructions = """
         X++ (Dynamics 365 F&O) code index for PackagesLocalDirectory. Prefer these tools over Grep/Glob/Read on AOT XML:
         one call returns what would otherwise need reading several large XML files.
-        - xpp_find: locate objects / methods / fields by name (wildcards * ?; "Obj.member" form; several names with ';').
+        - xpp_find: locate objects / methods / fields by name (wildcards * ?; "Obj.member" form; several names with ';');
+          property= lists a root property (e.g. PublicEntityName) of every object of a type / model.
         - xpp_object: skeleton of objects (fields, indexes, relations, controls, methods with line ranges, extensions).
         - xpp_method: method source with file path and line range; match/lines return only a numbered fragment.
         - xpp_callers / xpp_callees: who calls a method (custom and Microsoft code) / what a method uses.
@@ -32,6 +33,7 @@ public static class McpTools
     static string Run(string tool, object args, Func<string> f)
     {
         var sw = Stopwatch.StartNew();
+        var timing = CallTiming.Begin();
         string? result = null;
         bool error = false;
         try
@@ -52,7 +54,8 @@ public static class McpTools
         }
         finally
         {
-            Usage.Record(tool, args, result, sw.ElapsedMilliseconds, error);
+            CallTiming.End();
+            Usage.Record(tool, args, result, sw.ElapsedMilliseconds, error, timing);
         }
     }
 
@@ -63,8 +66,9 @@ public static class McpTools
         [Description("any (default) | object | method | field")] string? kind = null,
         [Description("Object type filter: class, table, form, edt, enum, view, entity, query, menuitem, tableext, formext, privilege, duty, role… or AxXxx")] string? type = null,
         [Description("Model or package name filter (wildcards allowed), e.g. Contoso")] string? model = null,
-        [Description("Max rows per section (default 40)")] int limit = 40)
-        => Run("xpp_find", new { query, kind, type, model, limit }, () => q.Find(query, kind, type, model, limit));
+        [Description("Max rows per section (default 40)")] int limit = 40,
+        [Description("List these root properties of every matching object instead, e.g. 'PublicEntityName;PublicCollectionName' with query='*' type=entity model=Contoso; 'Name=*pattern*' filters by value")] string? property = null)
+        => Run("xpp_find", new { query, kind, type, model, limit, property }, () => q.Find(query, kind, type, model, limit, property));
 
     [McpServerTool(Name = "xpp_object", ReadOnly = true, Idempotent = true)]
     [Description("Skeleton of AOT objects parsed live from XML: properties (labels resolved), class declaration, fields, indexes, relations, field groups, enum values, data sources, controls and menu elements as a tree (full paths, ReferenceField/ReplacementFieldGroup, menu Parent/PositionType), methods with signatures and line ranges, extensions summary. Compiled-only packages: skeleton from compiler metadata. Large control trees collapse to 2 levels: drill down with parent/depth/filter. Several objects: separate names with ';'.")]

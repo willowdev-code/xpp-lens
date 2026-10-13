@@ -45,12 +45,13 @@ public static class Usage
         return head.StartsWith("objects (0)", StringComparison.Ordinal) && !head.Contains("methods (") && !head.Contains("fields/members (");
     }
 
-    public static void Record(string tool, object args, string? result, long ms, bool error)
+    /// <param name="timing">Breakdown of <paramref name="ms"/>: waiting for the refresh lock, refreshing changed files.</param>
+    public static void Record(string tool, object args, string? result, long ms, bool error, CallTiming? timing = null)
     {
         if (!Enabled) return;
         try
         {
-            var line = new JsonObject
+            var node = new JsonObject
             {
                 ["t"] = DateTime.UtcNow.ToString("o"),
                 ["tool"] = tool,
@@ -60,7 +61,14 @@ public static class Usage
                 ["ms"] = ms,
                 ["empty"] = !error && LooksEmpty(result),
                 ["error"] = error,
-            }.ToJsonString();
+            };
+            if (timing != null)
+            {
+                node["wait"] = timing.WaitMs;
+                node["refresh"] = timing.RefreshMs;
+                if (timing.NamesInMemory) node["mem"] = true;
+            }
+            var line = node.ToJsonString();
             var path = Path.Combine(Dir, $"usage-{DateTime.UtcNow:yyyyMM}.jsonl");
             lock (Gate)
             {
@@ -74,9 +82,14 @@ public static class Usage
         }
     }
 
-    public sealed record Entry(DateTime Utc, string Tool, string Args, int Chars, long Ms, bool Empty, bool Error)
+    /// <param name="WaitMs">Time spent waiting for the refresh lock; null in entries written before 1.2.6.</param>
+    public sealed record Entry(DateTime Utc, string Tool, string Args, int Chars, long Ms, bool Empty, bool Error,
+        long? WaitMs = null, long? RefreshMs = null)
     {
         public int Tokens => (Chars + 3) / 4;
+
+        /// <summary>The query itself: the whole call minus waiting and refreshing.</summary>
+        public long? QueryMs => WaitMs is { } w && RefreshMs is { } r ? Math.Max(0, Ms - w - r) : null;
     }
 
     public static List<Entry> Load(DateTime sinceUtc)
@@ -95,7 +108,7 @@ public static class Usage
                     if (t < sinceUtc) continue;
                     list.Add(new Entry(t, n["tool"]!.GetValue<string>(), n["args"]?.ToJsonString() ?? "{}",
                         n["chars"]!.GetValue<int>(), n["ms"]!.GetValue<long>(), n["empty"]?.GetValue<bool>() ?? false,
-                        n["error"]?.GetValue<bool>() ?? false));
+                        n["error"]?.GetValue<bool>() ?? false, n["wait"]?.GetValue<long>(), n["refresh"]?.GetValue<long>()));
                 }
                 catch (Exception)
                 {
@@ -120,14 +133,21 @@ public static class Usage
         long totalTok = all.Sum(e => (long)e.Tokens);
         sb.AppendLine($"MCP calls in the last {days} day(s): {all.Count}, ~{totalTok:N0} tokens returned (chars/4)  [{Dir}]");
         sb.AppendLine();
-        sb.AppendLine($"{"tool",-18}{"calls",6}{"avg tok",9}{"p95 tok",9}{"max tok",9}{"avg ms",8}{"p95 ms",8}{"empty",7}{"err",5}");
+        sb.AppendLine($"{"tool",-18}{"calls",6}{"avg tok",9}{"p95 tok",9}{"max tok",9}{"avg ms",8}{"p95 ms",8}{"p95 wait",9}{"p95 query",10}{"empty",7}{"err",5}");
+        static int Ms(long v) => (int)Math.Min(int.MaxValue, v);
         foreach (var g in all.GroupBy(e => e.Tool).OrderByDescending(g => g.Sum(e => (long)e.Tokens)))
         {
             var tok = g.Select(e => e.Tokens).Order().ToList();
-            var ms = g.Select(e => (int)Math.Min(int.MaxValue, e.Ms)).Order().ToList();
+            var ms = g.Select(e => Ms(e.Ms)).Order().ToList();
+            // Wait and query time exist from 1.2.6 on; "-" when no call of the tool has them yet.
+            var wait = g.Where(e => e.WaitMs != null).Select(e => Ms(e.WaitMs!.Value + e.RefreshMs!.Value)).Order().ToList();
+            var query = g.Where(e => e.QueryMs != null).Select(e => Ms(e.QueryMs!.Value)).Order().ToList();
             sb.AppendLine($"{g.Key,-18}{g.Count(),6}{(int)tok.Average(),9}{Percentile(tok, 0.95),9}{tok[^1],9}" +
-                          $"{(int)ms.Average(),8}{Percentile(ms, 0.95),8}{100.0 * g.Count(e => e.Empty) / g.Count(),6:0}%{g.Count(e => e.Error),5}");
+                          $"{(int)ms.Average(),8}{Percentile(ms, 0.95),8}" +
+                          $"{(wait.Count == 0 ? "-" : Percentile(wait, 0.95).ToString()),9}{(query.Count == 0 ? "-" : Percentile(query, 0.95).ToString()),10}" +
+                          $"{100.0 * g.Count(e => e.Empty) / g.Count(),6:0}%{g.Count(e => e.Error),5}");
         }
+        sb.AppendLine("(wait = waiting for and refreshing changed files; query = the rest; both recorded from 1.2.6 on)");
 
         void Section(string title, IEnumerable<Entry> rows, Func<Entry, string> metric)
         {
@@ -139,7 +159,8 @@ public static class Usage
         }
 
         Section("largest answers:", all.OrderByDescending(e => e.Chars), e => $"{e.Tokens:N0} tok");
-        Section("slowest calls:", all.OrderByDescending(e => e.Ms), e => $"{e.Ms:N0} ms");
+        Section("slowest calls:", all.OrderByDescending(e => e.Ms),
+            e => $"{e.Ms:N0} ms" + (e.WaitMs is { } w ? $" (wait {w + e.RefreshMs:N0}, query {e.QueryMs:N0})" : ""));
         Section("empty answers (latest first) — possible gaps:", all.Where(e => e.Empty).OrderByDescending(e => e.Utc), e => e.Utc.ToLocalTime().ToString("MM-dd HH:mm"));
         Section("errors (latest first):", all.Where(e => e.Error).OrderByDescending(e => e.Utc), e => e.Utc.ToLocalTime().ToString("MM-dd HH:mm"));
         return sb.ToString().TrimEnd();

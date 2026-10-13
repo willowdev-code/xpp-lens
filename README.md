@@ -124,7 +124,7 @@ What each MCP tool answers, when Claude should reach for it, and the CLI equival
 
 | Tool | Answers | Use it when | CLI example |
 |---|---|---|---|
-| `xpp_find` | where objects, methods, fields are (`*`, `?`, `Object.member`, dotted extension names) | you know a name or part of it | `xpplens find "Cust*Invoice*; SalesLine.createLine"` |
+| `xpp_find` | where objects, methods, fields are (`*`, `?`, `Object.member`, dotted extension names); with `property`: a root property of every object of a type / model | you know a name or part of it; "PublicEntityName of all our entities" | `xpplens find "Cust*Invoice*; SalesLine.createLine"`, `xpplens find "*" --type entity --model Contoso --property PublicEntityName` |
 | `xpp_object` | skeleton of an object: properties with labels, fields, indexes, relations, data sources, control/menu tree, methods with line ranges, extensions | you need the structure, not the code | `xpplens object CustTable --type table` |
 | `xpp_method` | the source of a method with file path and line range, CoC wrappers and handlers of it | you need the code; for long methods with `match`/`lines` | `xpplens method SalesTable validateWrite --match "checkFailed" --context 2` |
 | `xpp_callers` | who calls a method — custom code first, then compiled packages and Microsoft code; chained calls (`Table::find().m()`) included | impact of a change, "where is this used" | `xpplens callers CustTable creditMax` |
@@ -174,7 +174,9 @@ xpplens stats --days 7 --top 10
 
 It shows per tool the number of calls, average / p95 / max answer size in tokens (characters / 4), time, the share of
 empty answers, plus the largest and slowest calls and the latest empty answers — the places where the tool did not
-help and Claude probably fell back to reading files. Switch off with `xpplens config --usage-log false`.
+help and Claude probably fell back to reading files. From 1.2.6 the time is split into waiting for the index refresh
+(`p95 wait`) and the query itself (`p95 query`), which tells a slow disk from a slow query.
+Switch off with `xpplens config --usage-log false`.
 
 ## CLI
 

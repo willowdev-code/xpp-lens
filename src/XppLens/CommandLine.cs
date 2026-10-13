@@ -27,7 +27,7 @@ public sealed partial class CommandLine
         ["unregister"] = ["name=", "exe=", "desktop", "code", "any"],
         ["build"] = ["full-only", "std-only", "compiled-only", "force"],
         ["status"] = ["counts", "ascii"],
-        ["find"] = ["kind=", "type=", "model=", "limit="],
+        ["find"] = ["kind=", "type=", "model=", "limit=", "property="],
         ["object"] = ["type=", "sections=", "parent=", "depth=", "filter="],
         ["method"] = ["type=", "match=", "lines=", "context="],
         ["callers"] = ["depth=", "limit=", "standard="],

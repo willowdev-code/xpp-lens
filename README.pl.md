@@ -125,7 +125,7 @@ Na co odpowiada każde narzędzie MCP, kiedy Claude powinien po nie sięgnąć i
 
 | Narzędzie | Odpowiada na | Kiedy używać | Przykład w CLI |
 |---|---|---|---|
-| `xpp_find` | gdzie są obiekty, metody, pola (`*`, `?`, `Obiekt.składowa`, nazwy rozszerzeń z kropką) | znasz nazwę albo jej fragment | `xpplens find "Cust*Invoice*; SalesLine.createLine"` |
+| `xpp_find` | gdzie są obiekty, metody, pola (`*`, `?`, `Obiekt.składowa`, nazwy rozszerzeń z kropką); z `property`: właściwość główna każdego obiektu danego typu / modelu | znasz nazwę albo jej fragment; „PublicEntityName wszystkich naszych encji” | `xpplens find "Cust*Invoice*; SalesLine.createLine"`, `xpplens find "*" --type entity --model Contoso --property PublicEntityName` |
 | `xpp_object` | szkielet obiektu: właściwości z etykietami, pola, indeksy, relacje, źródła danych, drzewo kontrolek/menu, metody z zakresami linii, rozszerzenia | potrzebna struktura, nie kod | `xpplens object CustTable --type table` |
 | `xpp_method` | kod metody ze ścieżką pliku i zakresem linii, jej wrappery CoC i handlery | potrzebny kod; przy długich metodach z `match`/`lines` | `xpplens method SalesTable validateWrite --match "checkFailed" --context 2` |
 | `xpp_callers` | kto wywołuje metodę — najpierw kod własny, potem pakiety skompilowane i kod Microsoftu; z wywołaniami łańcuchowymi (`Table::find().m()`) | wpływ zmiany, „gdzie to jest używane” | `xpplens callers CustTable creditMax` |
@@ -175,7 +175,9 @@ xpplens stats --days 7 --top 10
 
 Pokazuje dla każdego narzędzia liczbę wywołań, średni / p95 / maksymalny rozmiar odpowiedzi w tokenach (znaki / 4),
 czas i odsetek pustych odpowiedzi, a do tego największe i najwolniejsze wywołania oraz ostatnie puste odpowiedzi —
-miejsca, gdzie narzędzie nie pomogło i Claude zapewne wrócił do czytania plików. Wyłączenie: `xpplens config --usage-log false`.
+miejsca, gdzie narzędzie nie pomogło i Claude zapewne wrócił do czytania plików. Od 1.2.6 czas jest rozbity na
+czekanie na odświeżenie indeksu (`p95 wait`) i samo zapytanie (`p95 query`) — to odróżnia wolny dysk od wolnego zapytania.
+Wyłączenie: `xpplens config --usage-log false`.
 
 ## CLI
 

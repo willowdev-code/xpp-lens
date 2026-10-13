@@ -268,6 +268,56 @@ public class QueryTests(IndexFixture fx)
     }
 
     [Fact]
+    public void Wildcard_find_gives_the_same_answer_from_the_names_in_memory()
+    {
+        string[] queries = ["*Invoice*", "Contoso", "calc_T*", "Demo?ustomer", "*.validateWrite", "credit"];
+        var fromIndex = queries.Select(q => Q.Find(q, null, null, null, 40)).ToList();
+        try
+        {
+            fx.Service.BuildNames();
+            Assert.True(fx.Service.Names.Ready);
+            Assert.True(fx.Service.Names.Count > 10);
+            var fromMemory = queries.Select(q => Q.Find(q, null, null, null, 40)).ToList();
+            for (int i = 0; i < queries.Length; i++) Assert.Equal(fromIndex[i], fromMemory[i]);
+            Assert.Equal("objects (0):", Q.Find("*NoSuchNameAnywhere*", null, null, null, 40));
+        }
+        finally
+        {
+            fx.Service.Names.Invalidate();
+        }
+    }
+
+    [Fact]
+    public void Parallel_reads_give_the_same_answers()
+    {
+        Func<string>[] calls =
+        [
+            () => Q.Find("*Invoice*", null, null, null, 40),
+            () => Q.Object("ContosoHelper", null, null, null, 0, null),
+            () => Q.Method("ContosoInvoiceService", "run", null, null, null, 3),
+            () => Q.Refs("DemoCustomer", null, null, null, 150),
+            () => Q.Callers("DemoPosting", "post", 1, 80),
+        ];
+        var expected = calls.Select(c => c()).ToList();
+        var results = new string[calls.Length * 8];
+        Parallel.For(0, results.Length, new ParallelOptions { MaxDegreeOfParallelism = 8 }, i => results[i] = calls[i % calls.Length]());
+        for (int i = 0; i < results.Length; i++) Assert.Equal(expected[i % calls.Length], results[i]);
+    }
+
+    [Fact]
+    public void Find_lists_a_property_of_every_object_of_a_type()
+    {
+        var res = Q.Find("*", null, "entity", null, 40, "PublicEntityName;PublicCollectionName");
+        Assert.Contains("1 object(s) of type AxDataEntityView", res);
+        Assert.Contains("DemoCustomerEntity [StdBase, std]  PublicEntityName=DemoCustomer; PublicCollectionName=DemoCustomers", res);
+
+        Assert.Contains("PublicEntityName=DemoCustomer", Q.Find("*", null, "entity", "StdBase", 40, "PublicEntityName=Demo*"));
+        Assert.StartsWith("nothing found", Q.Find("*", null, "entity", null, 40, "PublicEntityName=*Vendor*"));
+        Assert.Contains("needs a scope", Q.Find("*", null, null, null, 40, "Label"));
+        Assert.Contains("TableGroup=", Q.Find("Demo*", null, "table", null, 40, "TableGroup"));
+    }
+
+    [Fact]
     public void Grep_takes_several_object_names()
     {
         var both = Q.Grep(@"\(", null, null, "ContosoHelper;ContosoInvoice*", false, 200);

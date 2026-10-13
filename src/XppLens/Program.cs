@@ -283,6 +283,7 @@ if (cmd is "help" or "-h" or "--help")
                                                                  at the end without asking)
           xpplens stats [--days 7] [--top 10]                   tokens, time and empty answers of MCP calls
           xpplens find <query[;query…]> [--kind any|object|method|field] [--type t] [--model m] [--limit n]
+                       [--property "Name[;Name2]" | "Name=*value*"]   list root properties of the matching objects
           xpplens object <name[;name…]> [--type t] [--sections list] [--parent control] [--depth n] [--filter *text*]
           xpplens method <object> [<method[;method…]>] [--type t] [--match regex] [--lines from-to] [--context n]
           xpplens callers <object> <method> [--depth n] [--limit n] [--standard true|false]
@@ -386,7 +387,7 @@ try
 
             string output = cmd switch
             {
-                "find" => q.Find(Arg(0), Opt("kind"), Opt("type"), Opt("model"), int.Parse(Opt("limit") ?? "40")),
+                "find" => q.Find(Arg(0), Opt("kind"), Opt("type"), Opt("model"), int.Parse(Opt("limit") ?? "40"), Opt("property")),
                 "object" => q.Object(Arg(0), Opt("type"), Opt("sections"), Opt("parent"), int.Parse(Opt("depth") ?? "0"), Opt("filter")),
                 "method" => MethodCommand(),
                 "callers" => q.Callers(Arg(0), Arg(1), int.Parse(Opt("depth") ?? "1"), int.Parse(Opt("limit") ?? "80"),
