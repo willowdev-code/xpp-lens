@@ -244,6 +244,52 @@ public class HelperTests
     }
 
     [Fact]
+    public void Kernel_compiler_metadata_gives_signatures()
+    {
+        // A made-up document in the shape of the compiler metadata embedded in Microsoft.Dynamics.AX.Metadata.dll.
+        const string xml = """
+            <?xml version="1.0" encoding="utf-8"?>
+            <AxCompilerMetadata>
+              <Extends>DemoTreeNode</Extends>
+              <IsKernelClass>true</IsKernelClass>
+              <Methods>
+                <Method>
+                  <Name>addField</Name>
+                  <Visibility>Public</Visibility>
+                  <Parameters>
+                    <AxMethodParameter><Type>ExtendedDataType</Type><TypeName>FieldId</TypeName><Name>_field</Name></AxMethodParameter>
+                    <AxMethodParameter><Type>Int32</Type><TypeName></TypeName><DefaultValue>1</DefaultValue><Name>_index</Name></AxMethodParameter>
+                  </Parameters>
+                  <ReturnType><Type>Class</Type><TypeName>DemoQueryField</TypeName></ReturnType>
+                </Method>
+                <Method>
+                  <Name>construct</Name>
+                  <Visibility>Public</Visibility>
+                  <IsStatic>true</IsStatic>
+                  <Parameters />
+                  <ReturnType><Type>String</Type><TypeName></TypeName></ReturnType>
+                </Method>
+                <Method>
+                  <Name>reset</Name>
+                  <Visibility>Protected</Visibility>
+                  <IsFinal>true</IsFinal>
+                  <ReturnType><TypeName></TypeName></ReturnType>
+                </Method>
+              </Methods>
+            </AxCompilerMetadata>
+            """;
+        var po = KernelMetadata.ApplyCompilerMetadata("AxClass", "DemoQuery", xml, null)!;
+        Assert.Equal("DemoTreeNode", po.Extends);
+        Assert.Equal(["addField", "construct", "reset"], po.Methods.Select(m => m.Name));
+        Assert.Equal("public DemoQueryField addField(FieldId _field, int _index = 1)", po.Methods[0].Signature);
+        Assert.Equal("public static str construct()", po.Methods[1].Signature);
+        Assert.True(po.Methods[1].IsStatic);
+        Assert.Equal("protected final void reset()", po.Methods[2].Signature);
+        Assert.Contains(po.Refs, r => r.Kind == "extends" && r.Target == "DemoTreeNode");
+        Assert.Empty(KernelMetadata.ReadObjects(Path.Combine(Path.GetTempPath(), "no-such-" + Guid.NewGuid() + ".dll")));
+    }
+
+    [Fact]
     public void Name_patterns_match_whole_names_like_the_index()
     {
         bool M(string pattern, string name) => NameDirectory.PatternRegex(pattern).IsMatch("\n" + name + "\n");

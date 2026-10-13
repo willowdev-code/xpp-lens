@@ -87,6 +87,15 @@ public sealed partial class Queries(IndexService svc)
     /// Condition for a wildcard / substring name search. With the names in memory (MCP server) it becomes an exact
     /// list the index answers at once; otherwise LIKE, which reads the whole table.
     /// </summary>
+    /// <summary>
+    /// "Object.member": the object itself and its extensions (table / form / class extensions name the object as their
+    /// target), so fields and methods added in extensions are found from the base name (both columns are indexed).
+    /// </summary>
+    static string OwnerCond(string? ownerName) =>
+        ownerName == null ? ""
+        : HasWildcard(ownerName) ? "AND (o.name LIKE $olike ESCAPE '!' OR o.target LIKE $olike ESCAPE '!')"
+        : "AND (o.name = $oq OR o.target = $oq)";
+
     static string AddLike(string column, string pattern, string param, List<(string, object?)> args)
     {
         args.Add((param, Like(pattern)));
@@ -351,12 +360,12 @@ public sealed partial class Queries(IndexService svc)
             var mCond = exactOnly ? "m.name = $mq"
                 : ownerName != null && !HasWildcard(ownerName) ? AddLike("m.name", methodName, "$mlike", args)
                 : NameFilter("m.name", NameDirectory.Kind.Method, methodName, "$mlike", args);
-            var oCond = ownerName == null ? "" : HasWildcard(ownerName) ? "AND o.name LIKE $olike ESCAPE '!'" : "AND o.name = $oq";
+            var oCond = OwnerCond(ownerName);
             var rows = s.Query($"""
                 SELECT o.type, o.name, m.owner, m.name, m.sig, m.start_line, md.package, md.name, md.tier
                 FROM methods m JOIN objects o ON o.id = m.object_id JOIN files f ON f.id = m.file_id JOIN models md ON md.id = f.model_id
                 WHERE {mCond} {oCond} {(tp != null ? "AND o.type LIKE $tp" : "")} {modelFilter} AND m.name <> 'classDeclaration'
-                ORDER BY CASE WHEN m.name = $mq THEN 0 ELSE 1 END, md.tier DESC, {TypePriority}, o.name, m.name, m.owner
+                ORDER BY CASE WHEN m.name = $mq THEN 0 ELSE 1 END, CASE WHEN o.name = $oq THEN 0 ELSE 1 END, md.tier DESC, {TypePriority}, o.name, m.name, m.owner
                 LIMIT $limit
                 """, [.. args])
                 .Select(r => (Type: r.GetString(0), Obj: r.GetString(1), Owner: N(r, 2), Name: r.GetString(3), Sig: N(r, 4),
@@ -375,13 +384,13 @@ public sealed partial class Queries(IndexService svc)
             var mCond = exactOnly ? "mb.name = $mq"
                 : ownerName != null && !HasWildcard(ownerName) ? AddLike("mb.name", methodName, "$mlike", args)
                 : NameFilter("mb.name", NameDirectory.Kind.Member, methodName, "$mlike", args);
-            var oCond = ownerName == null ? "" : HasWildcard(ownerName) ? "AND o.name LIKE $olike ESCAPE '!'" : "AND o.name = $oq";
+            var oCond = OwnerCond(ownerName);
             var rows = s.Query($"""
                 SELECT o.type, o.name, mb.kind, mb.name, mb.info, md.package, md.name, md.tier
                 FROM members mb JOIN objects o ON o.id = mb.object_id JOIN files f ON f.id = mb.file_id JOIN models md ON md.id = f.model_id
                 WHERE {mCond} {oCond} AND mb.kind IN ('field','enumvalue','datasource','index','relation','fieldgroup','control')
                 {(tp != null ? "AND o.type LIKE $tp" : "")} {modelFilter}
-                ORDER BY CASE WHEN mb.name = $mq THEN 0 ELSE 1 END, md.tier DESC, {TypePriority}, o.name, mb.kind, mb.name
+                ORDER BY CASE WHEN mb.name = $mq THEN 0 ELSE 1 END, CASE WHEN o.name = $oq THEN 0 ELSE 1 END, md.tier DESC, {TypePriority}, o.name, mb.kind, mb.name
                 LIMIT $limit
                 """, [.. args])
                 .Select(r => $"  {r.GetString(0)} {r.GetString(1)}.{r.GetString(3)} ({r.GetString(2)}) {Tag(r.GetString(5), r.GetString(6), r.GetInt32(7))}  {Trunc(N(r, 4), 120)}")
@@ -443,7 +452,9 @@ public sealed partial class Queries(IndexService svc)
 
         parent = string.IsNullOrWhiteSpace(parent) ? null : parent.Trim();
         filter = string.IsNullOrWhiteSpace(filter) ? null : filter.Trim();
-        if (string.IsNullOrWhiteSpace(sections) && (parent != null || filter != null)) sections = "controls,menuitems";
+        bool dsGiven = sections != null && sections.Contains("datasource", StringComparison.OrdinalIgnoreCase);
+        bool autoSections = string.IsNullOrWhiteSpace(sections);
+        if (autoSections && (parent != null || filter != null)) sections = "controls,menuitems,datasources";
         var want = string.IsNullOrWhiteSpace(sections)
             ? null
             : new HashSet<string>(sections.Split([',', ' ', ';'], StringSplitOptions.RemoveEmptyEntries), StringComparer.OrdinalIgnoreCase);
@@ -491,7 +502,17 @@ public sealed partial class Queries(IndexService svc)
             if (!Show(title) && !Show(kind)) continue;
             if (TreeKinds.Contains(kind) && list.Any(m => m.Path.Length > 0))
             {
+                // parent=<data source> without sections: the data source answers, the control tree stays quiet.
+                if (autoSections && parent != null && filter == null
+                    && po.Members.Any(m => m.Kind == "datasource" && m.Name.Equals(parent, StringComparison.OrdinalIgnoreCase))
+                    && !list.Any(m => m.Name.Equals(parent, StringComparison.OrdinalIgnoreCase)))
+                    continue;
                 AppendTree(s, sb, list, title, parent, depth, filter, autoCollapse: true, cache);
+                continue;
+            }
+            if (kind == "datasource")
+            {
+                AppendDataSources(s, sb, po, list, parent, explicitSection: dsGiven, cache);
                 continue;
             }
             sb.AppendLine($"{title} ({list.Count}):");
@@ -524,6 +545,34 @@ public sealed partial class Queries(IndexService svc)
 
         return Finish(sb);
     });
+
+    /// <summary>
+    /// Data sources with their join and behaviour properties and a field count; parent=&lt;data source&gt; shows that one
+    /// with all its fields (a long field list per data source would otherwise cost thousands of tokens on big forms).
+    /// </summary>
+    void AppendDataSources(Store s, StringBuilder sb, ParsedObject po, List<ParsedMember> list, string? parent, bool explicitSection,
+        Dictionary<string, string?> cache)
+    {
+        string Line(ParsedMember m) => $"{m.Name}{(m.Owner.Length > 0 ? $" (under {m.Owner})" : "")}{(m.Info.Length > 0 ? ": " + WithLabels(s, m.Info, cache) : "")}";
+        if (parent != null)
+        {
+            var ds = list.FirstOrDefault(m => m.Name.Equals(parent, StringComparison.OrdinalIgnoreCase));
+            if (ds == null)
+            {
+                // parent may name a control instead: say something only when data sources were asked for.
+                if (explicitSection) sb.AppendLine($"data sources: no data source named '{parent}' ({string.Join(", ", list.Select(m => m.Name))}).");
+                return;
+            }
+            sb.AppendLine($"data source {Line(ds)}");
+            var fields = po.Members.Where(m => m.Kind == "dsfield" && m.Owner.Equals(ds.Name, StringComparison.OrdinalIgnoreCase)).Select(m => m.Name).ToList();
+            if (fields.Count > 0) sb.AppendLine($"  fields ({fields.Count}): {string.Join(", ", fields)}");
+            return;
+        }
+        sb.AppendLine($"data sources ({list.Count}):");
+        foreach (var m in list) sb.AppendLine($"{new string(' ', 2 * Math.Max(1, m.Depth))}{Line(m)}");
+        if (po.Members.Any(m => m.Kind == "dsfield"))
+            sb.AppendLine("  (fields of one data source: parent=<data source name>)");
+    }
 
     /// <summary>
     /// Control / menu trees. filter = wildcard on name or path (prints full paths); parent = subtree of one element;

@@ -66,6 +66,10 @@ public static class Catalog
                 }
             }
         }
+        // X++ kernel types (QueryBuildDataSource, FormDataObject, Args…): compiled-only model read from the
+        // metadata assembly in bin (see KernelMetadata).
+        if (KernelMetadata.DllPath(cfg.PackagesDir) is { } kernel && !result.Any(m => m.Package.Equals(KernelMetadata.Package, StringComparison.OrdinalIgnoreCase)))
+            result.Add(new ModelInfo(KernelMetadata.Package, KernelMetadata.Package, "Microsoft (kernel)", 0, Path.GetDirectoryName(kernel)!, Full: false, Binary: true));
         return result;
     }
 

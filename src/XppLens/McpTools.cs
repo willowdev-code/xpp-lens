@@ -71,12 +71,12 @@ public static class McpTools
         => Run("xpp_find", new { query, kind, type, model, limit, property }, () => q.Find(query, kind, type, model, limit, property));
 
     [McpServerTool(Name = "xpp_object", ReadOnly = true, Idempotent = true)]
-    [Description("Skeleton of AOT objects parsed live from XML: properties (labels resolved), class declaration, fields, indexes, relations, field groups, enum values, data sources, controls and menu elements as a tree (full paths, ReferenceField/ReplacementFieldGroup, menu Parent/PositionType), methods with signatures and line ranges, extensions summary. Compiled-only packages: skeleton from compiler metadata. Large control trees collapse to 2 levels: drill down with parent/depth/filter. Several objects: separate names with ';'.")]
+    [Description("Skeleton of AOT objects parsed live from XML: properties (labels resolved), class declaration, fields, indexes, relations, field groups, enum values, data sources (join, InsertIfEmpty / Allow* / LinkType…, field count; parent=<data source> lists its fields), controls and menu elements as a tree (full paths, ReferenceField/ReplacementFieldGroup, menu Parent/PositionType), methods with signatures and line ranges, extensions summary. Compiled-only packages: skeleton from compiler metadata. Large control trees collapse to 2 levels: drill down with parent/depth/filter. Several objects: separate names with ';'.")]
     public static string Object(Queries q,
         [Description("Exact object name(s), e.g. CustTable, ContosoFeatureBase, CustTable.Contoso; several with ';'")] string name,
         [Description("Optional type when the name is ambiguous: class, table, form, edt, enum, view, entity, query, menuitem…")] string? type = null,
         [Description("Optional comma list to limit output: props, declaration, fields, indexes, relations, fieldgroups, values, datasources, controls, menuitems, methods, extensions")] string? sections = null,
-        [Description("Controls/menu tree: show only the subtree under this element name or path, e.g. TabPageGeneral or HeaderGrid")] string? parent = null,
+        [Description("Controls/menu tree: show only the subtree under this element name or path, e.g. TabPageGeneral or HeaderGrid; data sources: one data source with all its fields, e.g. SalesLine")] string? parent = null,
         [Description("Controls/menu tree: number of levels to show (below parent if given)")] int depth = 0,
         [Description("Controls/menu tree: wildcard on element name or path, e.g. *Address*; prints full paths")] string? filter = null)
         => Run("xpp_object", new { name, type, sections, parent, depth, filter }, () => q.Object(name, type, sections, parent, depth, filter));

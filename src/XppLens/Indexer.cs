@@ -177,15 +177,19 @@ public sealed class Indexer(Config cfg)
     public SyncStats SyncBinaryModel(Store s, ModelInfo m, bool force, Func<IDisposable> writeLock)
     {
         var stats = new SyncStats();
-        var fp = BinaryPackage.Fingerprint(m, cfg.LabelLanguages);
+        bool kernel = KernelMetadata.IsKernel(m);
+        var fp = kernel ? KernelMetadata.Fingerprint(m) : BinaryPackage.Fingerprint(m, cfg.LabelLanguages);
         if (!force && s.Scalar("SELECT fingerprint FROM models WHERE id=$id", ("$id", m.Id)) as string == fp)
             return stats;
 
-        var objects = BinaryPackage.ReadObjects(m);
-        var labels = BinaryPackage.ReadLabels(m, cfg.LabelLanguages).ToList();
-        var xref = BinaryPackage.XrefPath(m.Dir, m.Package);
-        var fi = xref != null ? new FileInfo(xref) : null;
+        var kernelDll = Path.Combine(m.Dir, KernelMetadata.Assembly);
+        var objects = kernel ? KernelMetadata.ReadObjects(kernelDll) : BinaryPackage.ReadObjects(m);
+        var labels = kernel ? [] : BinaryPackage.ReadLabels(m, cfg.LabelLanguages).ToList();
+        var source = kernel ? kernelDll : BinaryPackage.XrefPath(m.Dir, m.Package);
+        var fi = source != null ? new FileInfo(source) : null;
         long size = fi?.Length ?? 0, mtime = fi?.LastWriteTimeUtc.Ticks ?? 0;
+        string ObjectPath(ParsedObject o) =>
+            kernel ? $"{kernelDll}{BinaryPackage.Marker}{o.Type}/{o.Name}" : BinaryPackage.ObjectPath(m, o.Type, o.Name);
 
         using (writeLock())
         {
@@ -193,7 +197,7 @@ public sealed class Indexer(Config cfg)
             using (var w = new Store.Writer(s))
             {
                 foreach (var o in objects)
-                    w.WriteObject(m.Id, BinaryPackage.ObjectPath(m, o.Type, o.Name), size, mtime, o, storeSources: false);
+                    w.WriteObject(m.Id, ObjectPath(o), size, mtime, o, storeSources: false);
                 foreach (var (path, labelFile, lang, list) in labels)
                 {
                     var lfi = new FileInfo(path);

@@ -268,6 +268,32 @@ public class QueryTests(IndexFixture fx)
     }
 
     [Fact]
+    public void Form_data_sources_show_properties_and_fields_on_request()
+    {
+        var all = Q.Object("DemoCustomer", "form", "datasources", null, 0, null);
+        Assert.Contains("DemoCustomer: DemoCustomer insertIfEmpty=No allowDelete=No fields(2)", all);
+        Assert.Contains("parent=<data source name>", all);
+        Assert.DoesNotContain("AccountNum", all);
+
+        var one = Q.Object("DemoCustomer", "form", null, "DemoCustomer", 0, null);
+        Assert.Contains("data source DemoCustomer: DemoCustomer", one);
+        Assert.Contains("fields (2): AccountNum, CreditLimit", one);
+        Assert.DoesNotContain("no element named", one);
+
+        Assert.Contains("no data source named 'Nope' (DemoCustomer)", Q.Object("DemoCustomer", "form", "datasources", "Nope", 0, null));
+    }
+
+    [Fact]
+    public void Find_by_base_object_includes_its_extensions()
+    {
+        // ContosoSegment_Code is added to DemoCustomer by the table extension DemoCustomer.Contoso.
+        var res = Q.Find("DemoCustomer.ContosoSegment_Code", null, null, null, 40);
+        Assert.Contains("AxTableExtension DemoCustomer.Contoso.ContosoSegment_Code (field)", res);
+        Assert.Contains("DemoCustomer.Contoso.ContosoSegment_Code", Q.Find("DemoCustomer.Contoso*", "field", null, null, 40));
+        Assert.Contains("ContosoSegment_Code", Q.Find("Demo*.ContosoSeg*", null, null, null, 40));
+    }
+
+    [Fact]
     public void Wildcard_find_gives_the_same_answer_from_the_names_in_memory()
     {
         string[] queries = ["*Invoice*", "Contoso", "calc_T*", "Demo?ustomer", "*.validateWrite", "credit"];

@@ -3,6 +3,23 @@
 All notable changes to xpp-lens (called xpp-graft up to 1.2.0). Versions follow `<Version>` in
 `src/XppLens/XppLens.csproj`; release tags are `vX.Y.Z`.
 
+## 1.2.7 — 2026-10-13
+
+### Added
+- X++ kernel types are indexed as the compiled model `Kernel`: `QueryBuildDataSource`, `QueryBuildRange`,
+  `FormDataObject`, `xFormRun`, `xRecord`, `Map` and the other system classes with complete method signatures
+  (parameter types, defaults, static / final), base classes, system enums, EDTs and tables — about 3 400 objects read
+  from the resources of `bin\Microsoft.Dynamics.AX.Metadata.dll` (the metadata the X++ compiler uses), without
+  loading the assembly. Indexed in the background with the standard tier; re-read when the assembly changes.
+- `xpp_object` data sources show their behaviour properties (`InsertIfEmpty`, `InsertAtEnd`, `AllowCreate` /
+  `AllowEdit` / `AllowDelete`, `LinkType`, `OnlyFetchActive`, `DelayActive`, `Index`, `CounterField`…) and the
+  number of fields; `parent=<data source>` shows one data source with all its fields.
+
+### Fixed
+- `xpp_find "Table.member"` did not find fields and methods added in extensions of the table (found only with
+  `*.member` or the extension name). The object part now also matches extensions that name the object as their
+  target; the base object's own members come first.
+
 ## 1.2.6 — 2026-10-13
 
 ### Changed

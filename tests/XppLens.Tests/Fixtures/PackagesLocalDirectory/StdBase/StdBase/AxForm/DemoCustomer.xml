@@ -38,6 +38,16 @@
 		<AxFormDataSource xmlns="">
 			<Name>DemoCustomer</Name>
 			<Table>DemoCustomer</Table>
+			<Fields>
+				<AxFormDataSourceField>
+					<DataField>AccountNum</DataField>
+				</AxFormDataSourceField>
+				<AxFormDataSourceField>
+					<DataField>CreditLimit</DataField>
+				</AxFormDataSourceField>
+			</Fields>
+			<AllowDelete>No</AllowDelete>
+			<InsertIfEmpty>No</InsertIfEmpty>
 		</AxFormDataSource>
 	</DataSources>
 	<Design>

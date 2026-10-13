@@ -91,6 +91,17 @@ public static class XmlObjectParser
         "View", "Map", "Duty", "Privilege", "Role", "SecurityPolicy", "Workflow", "WorkflowType", "Tile", "Kpi",
     };
 
+    /// <summary>Data source properties worth showing next to the table and join (property → short label).</summary>
+    static readonly (string Key, string Label)[] DataSourceProps =
+    [
+        ("InsertIfEmpty", "insertIfEmpty"), ("InsertAtEnd", "insertAtEnd"), ("AllowCreate", "allowCreate"),
+        ("AllowEdit", "allowEdit"), ("AllowDelete", "allowDelete"), ("AllowCheck", "allowCheck"),
+        ("OnlyFetchActive", "onlyFetchActive"), ("DelayActive", "delayActive"), ("AutoQuery", "autoQuery"),
+        ("AutoSearch", "autoSearch"), ("Index", "index"), ("StartPosition", "startPosition"), ("FirstOnly", "firstOnly"),
+        ("DynamicFields", "dynamicFields"), ("ValidTimeStateAutoQuery", "validTimeState"),
+        ("CrossCompanyAutoQuery", "crossCompany"), ("CounterField", "counterField"), ("IsReadOnly", "readOnly"),
+    ];
+
     static readonly HashSet<string> DataSourceElements = new(StringComparer.Ordinal)
     {
         "AxFormDataSource", "AxQuerySimpleRootDataSource", "AxQuerySimpleEmbeddedDataSource",
@@ -298,6 +309,16 @@ public static class XmlObjectParser
                 P("JoinMode", "joinMode");
                 if (f.Leaf("UseRelations") == "Yes") parts.Add("useRelations");
                 if (f.RelationPairs is { Count: > 0 }) parts.Add($"on {string.Join(", ", f.RelationPairs)}");
+                // Behaviour properties (the XML holds only values that differ from the default).
+                foreach (var (key, label) in DataSourceProps) P(key, label);
+                // Fields: only when the object is read (not stored in the index); listed on request per data source
+                // (xpp_object parent=<data source>), the data source line shows the count.
+                if (mode == ParseMode.Render && f.Name != null && f.ChildNames is { Count: > 0 } fields)
+                {
+                    parts.Add($"fields({fields.Count})");
+                    foreach (var dsField in fields)
+                        obj.Members.Add(new ParsedMember { Kind = "dsfield", Owner = f.Name, Name = dsField });
+                }
                 if (f.Name != null)
                     obj.Members.Add(new ParsedMember
                     {
