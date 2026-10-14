@@ -3,6 +3,20 @@
 All notable changes to xpp-lens (called xpp-graft up to 1.2.0). Versions follow `<Version>` in
 `src/XppLens/XppLens.csproj`; release tags are `vX.Y.Z`.
 
+## 1.2.8 — 2026-10-14
+
+### Fixed
+- Restarting Claude Desktop at the end of an update could close Claude and fail to start it again ("Cannot process
+  argument transformation on parameter 'Package'"): after Claude had updated itself, the running process was in an
+  older version folder than the installed package, so the package was not found. The application is now found by
+  its package family (from the Start menu, then the package list) and the way to start it is worked out before Claude
+  is stopped — if it cannot be, Claude is left running with a note to restart it yourself. Per-user installations
+  start through their launcher, which always runs the current version.
+- The restart question did not show the new version (`$version?` is a different variable in PowerShell).
+- Release packages since 1.2.5 nested their files as `xpp-lens/xpp-lens/dist/xpp-lens/…` because the release
+  workflow passes a relative output folder; `pack.ps1` now works with the full path. Updating was not affected (the
+  updater finds `install.ps1` at any depth), unpacking by hand was.
+
 ## 1.2.7 — 2026-10-13
 
 ### Added

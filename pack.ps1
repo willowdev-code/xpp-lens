@@ -20,6 +20,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+# Absolute: ZIP entry names are cut from full paths (a relative -OutDir, as in the release workflow, nested them).
+$OutDir = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutDir)
 $proj = Join-Path $PSScriptRoot 'src\XppLens\XppLens.csproj'
 $stage = Join-Path $OutDir 'xpp-lens'
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
