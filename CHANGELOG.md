@@ -3,7 +3,7 @@
 All notable changes to xpp-lens (called xpp-graft up to 1.2.0). Versions follow `<Version>` in
 `src/XppLens/XppLens.csproj`; release tags are `vX.Y.Z`.
 
-## 1.2.9 — unreleased
+## 1.2.9 — 2026-10-14
 
 ### Development
 - `release.ps1 -Version X.Y.Z` releases a version end to end and stops at the first failure: CHANGELOG section and
