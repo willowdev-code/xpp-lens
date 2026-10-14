@@ -21,11 +21,14 @@ $ErrorActionPreference = 'Stop'
 $changelog = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'CHANGELOG.md'), [Text.Encoding]::UTF8) -replace "`r`n", "`n"
 $lines = $changelog -split "`n"
 
+# A test release (1.3.0-beta.2) is described by the section of the version it leads to (## 1.3.0 - unreleased).
+$isTest = $Version -match '-'
+$sectionVersion = ($Version -split '-')[0]
 $start = -1
 for ($i = 0; $i -lt $lines.Count; $i++) {
-    if ($lines[$i] -match ('^## ' + [regex]::Escape($Version) + '(\s|$)')) { $start = $i; break }
+    if ($lines[$i] -match ('^## ' + [regex]::Escape($sectionVersion) + '(\s|$)')) { $start = $i; break }
 }
-if ($start -lt 0) { throw "CHANGELOG.md has no section '## $Version'" }
+if ($start -lt 0) { throw "CHANGELOG.md has no section '## $sectionVersion'" }
 $end = $lines.Count
 for ($i = $start + 1; $i -lt $lines.Count; $i++) {
     if ($lines[$i] -match '^## ') { $end = $i; break }
@@ -33,8 +36,18 @@ for ($i = $start + 1; $i -lt $lines.Count; $i++) {
 $section = if ($end - 1 -gt $start) { ($lines[($start + 1)..($end - 1)] -join "`n").Trim() } else { '' }
 if (-not $section) { throw "the CHANGELOG.md section for $Version is empty" }
 
+$testNote = if ($isTest) {
+    @"
+**Test release** of $sectionVersion, for trying it out before the regular release. ``xpplens update`` does not offer
+it; install it with ``xpplens update --install --pre`` (available from 1.3.0). The regular $sectionVersion replaces it
+through the usual ``xpplens update --install``.
+
+
+"@
+} else { '' }
+
 $notes = @"
-X++ (Dynamics 365 F&O) code index served to AI assistants over MCP.
+$($testNote)X++ (Dynamics 365 F&O) code index served to AI assistants over MCP.
 
 ## Install
 
@@ -44,9 +57,9 @@ Download ``xpp-lens-$Version.zip``, unzip it and run in a regular (non-admin) Po
 powershell -ExecutionPolicy Bypass -File .\xpp-lens\install.ps1 -Languages en-US,pl
 ``````
 
-Self-contained build - no .NET required on the target machine. Already installed? Close Claude and run
+Self-contained build - no .NET required on the target machine. Already installed? Run
 ``xpplens update --install`` (available from 1.2.2), or ``install.ps1`` from this package - your settings and
-index are kept.
+index are kept, Claude may stay open (from 1.2.5).
 
 ## Changes
 

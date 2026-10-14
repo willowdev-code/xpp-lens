@@ -43,7 +43,8 @@ it (SHA-256 checked) and runs its installer — settings and index are kept. Run
 does the same. Claude does not have to be closed: an `xpplens.exe` used by an open session is renamed to `*.old`
 (deleted later), so that session keeps the old version and new sessions start the new one. At the end the installer
 offers to restart Claude Desktop (`xpplens update --install --restart-claude` or `install.ps1 -RestartClaude`: without
-asking); in Claude Code `/mcp` → reconnect xpp-lens does the same for one session.
+asking); in Claude Code `/mcp` → reconnect xpp-lens does the same for one session. Test releases (`X.Y.Z-beta.N`)
+are offered only with `--pre`: `xpplens update --install --pre`.
 
 Useful parameters:
 
@@ -255,15 +256,19 @@ Adding a test: put the XML the case needs into `Fixtures` (keep names neutral �
 
 ### Releasing a new version
 
-Add the section `## X.Y.Z — unreleased` to `CHANGELOG.md`, then:
+Work happens on the branch `dev`; `main` always holds the last regular release. Add the section
+`## X.Y.Z — unreleased` to `CHANGELOG.md`, then on `dev`:
 
 ```powershell
-.\release.ps1 -Version X.Y.Z          # everything below, stops at the first failure
+.\release.ps1 -Version X.Y.Z -Pre     # test release X.Y.Z-beta.N (pre-release; xpplens update --install --pre)
+.\release.ps1 -Version X.Y.Z          # regular release: pull request dev -> main, merge, tag, publish
 .\release.ps1 -Version X.Y.Z -DryRun  # checks, scan, build and tests only
 ```
 
-It dates the section, sets `<Version>`, scans every file for private names, builds and tests, commits and pushes
-`main`, waits for CI, tags, waits for the Release workflow and checks the published package (SHA-256, layout).
+Both stop at the first failure. They set `<Version>`, scan every file for private names, build and test, commit
+and push `dev` and wait for CI. A test release is then tagged on `dev`; a regular release dates the CHANGELOG
+section, merges `dev` into `main` through a pull request (merge commit) and is tagged on `main`, after which `dev` is
+moved to `main`. Both wait for the Release workflow and check the published package (SHA-256, layout, kind).
 The private names (customers, partners, people) come from a local list that is never part of the repository:
 `-ScanList <file>`, the `XPPLENS_SCAN_LIST` variable, or `%USERPROFILE%\.claude\skills\xpp-lens-release\scan-names.txt`
 — one regular expression per line, `!word` for allowed words. Without the list the release stops.

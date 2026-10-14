@@ -21,7 +21,7 @@ bool Flag(string name) => line.Flag(name);
 
 string Arg(int i) => i < rest.Count ? rest[i] : throw new ArgumentException($"missing argument #{i + 1} for '{cmd}'");
 
-static string AppVersion() => typeof(Config).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
+static string AppVersion() => Updater.Current.ToString();
 
 // Box-drawing frames on a console (UTF-8 for the time of writing them); +-| when redirected to a file or pipe.
 static void PrintTables(Func<TableStyle, string> render, bool ascii)
@@ -60,7 +60,7 @@ if (cmd is "version" or "--version" or "-v")
 }
 
 if (cmd == "update")
-    return await Updater.Run(install: Flag("install"), restartClaude: Flag("restart-claude"));
+    return await Updater.Run(install: Flag("install"), restartClaude: Flag("restart-claude"), pre: Flag("pre"));
 
 if (cmd == "migrate")
 {
@@ -277,10 +277,10 @@ if (cmd is "help" or "-h" or "--help")
                         (--std-only also switches indexStandard on when an installation was made without it)
           xpplens status [--counts] [--ascii]                    --counts: also count references and labels (slow on a cold disk)
                                                                  --ascii: frames from +-| (automatic when redirected)
-          xpplens update [--install [--restart-claude]]          check GitHub for a newer release; --install downloads,
+          xpplens update [--install [--restart-claude]] [--pre]  check GitHub for a newer release; --install downloads,
                                                                  verifies (SHA-256) and installs it, keeping settings and index
                                                                  (Claude may stay open; --restart-claude restarts Claude Desktop
-                                                                 at the end without asking)
+                                                                 at the end without asking); --pre: test releases too
           xpplens stats [--days 7] [--top 10]                   tokens, time and empty answers of MCP calls
           xpplens find <query[;query…]> [--kind any|object|method|field] [--type t] [--model m] [--limit n]
                        [--property "Name[;Name2]" | "Name=*value*"]   list root properties of the matching objects

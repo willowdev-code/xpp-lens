@@ -12,28 +12,88 @@ namespace XppLens;
 /// SHA-256 digest GitHub publishes for it and runs its install.ps1 against this installation. This is the only
 /// network access of xpp-lens and happens only when the command is run.
 /// </summary>
+/// <summary>
+/// A release version: "1.3.0", or a test release "1.3.0-beta.2". A test release comes before its final version
+/// (1.3.0-beta.2 &lt; 1.3.0); its parts after the dash compare as numbers where they are numbers (beta.10 &gt; beta.9).
+/// </summary>
+public sealed record ReleaseVersion(int Major, int Minor, int Patch, string? Pre = null) : IComparable<ReleaseVersion>
+{
+    public bool IsPrerelease => Pre != null;
+
+    public int CompareTo(ReleaseVersion? other)
+    {
+        if (other is null) return 1;
+        int c = Major.CompareTo(other.Major);
+        if (c == 0) c = Minor.CompareTo(other.Minor);
+        if (c == 0) c = Patch.CompareTo(other.Patch);
+        if (c != 0) return c;
+        if (Pre == null || other.Pre == null) return Pre == null ? (other.Pre == null ? 0 : 1) : -1;
+        var a = Pre.Split('.');
+        var b = other.Pre.Split('.');
+        for (int i = 0; i < Math.Min(a.Length, b.Length); i++)
+        {
+            bool an = int.TryParse(a[i], out var ai), bn = int.TryParse(b[i], out var bi);
+            c = an && bn ? ai.CompareTo(bi) : an ? -1 : bn ? 1 : string.CompareOrdinal(a[i], b[i]);
+            if (c != 0) return c;
+        }
+        return a.Length.CompareTo(b.Length);
+    }
+
+    public static bool operator >(ReleaseVersion? a, ReleaseVersion? b) => a is not null && a.CompareTo(b) > 0;
+    public static bool operator <(ReleaseVersion? a, ReleaseVersion? b) => b is not null && b.CompareTo(a) > 0;
+    public static bool operator >=(ReleaseVersion? a, ReleaseVersion? b) => !(a < b);
+    public static bool operator <=(ReleaseVersion? a, ReleaseVersion? b) => !(a > b);
+
+    public override string ToString() => $"{Major}.{Minor}.{Patch}{(Pre != null ? "-" + Pre : "")}";
+}
+
 public static class Updater
 {
     public const string Repository = "willowdev-code/xpp-lens";
 
-    public sealed record ReleaseInfo(Version Version, string Tag, string PageUrl, string? AssetName, string? AssetUrl, string? Sha256, string Notes);
+    public sealed record ReleaseInfo(ReleaseVersion Version, string Tag, string PageUrl, string? AssetName, string? AssetUrl, string? Sha256,
+        string Notes, bool Prerelease = false);
 
-    public static Version Current => typeof(Config).Assembly.GetName().Version is { } v ? new Version(v.Major, v.Minor, Math.Max(0, v.Build)) : new Version(0, 0, 0);
+    /// <summary>
+    /// The running version, with a test-release suffix ("1.3.0-beta.1") — from the informational version, which keeps
+    /// it (the assembly version holds numbers only); "+commit" build metadata is dropped.
+    /// </summary>
+    public static ReleaseVersion Current { get; } =
+        ParseVersion(typeof(Config).Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+                .OfType<System.Reflection.AssemblyInformationalVersionAttribute>().FirstOrDefault()?.InformationalVersion)
+        ?? (typeof(Config).Assembly.GetName().Version is { } v ? new ReleaseVersion(v.Major, v.Minor, Math.Max(0, v.Build)) : new ReleaseVersion(0, 0, 0));
 
-    /// <summary>"v1.2.10" / "1.2.10" → 1.2.10.</summary>
-    public static Version? ParseVersion(string? tag)
+    /// <summary>"v1.2.10" / "1.2.10" → 1.2.10; "v1.3.0-beta.2" → 1.3.0-beta.2; "+…" build metadata is dropped.</summary>
+    public static ReleaseVersion? ParseVersion(string? tag)
     {
         if (string.IsNullOrWhiteSpace(tag)) return null;
         var t = tag.Trim().TrimStart('v', 'V');
-        int dash = t.IndexOfAny(['-', '+']);
-        if (dash > 0) t = t[..dash];
-        return Version.TryParse(t, out var v) ? new Version(v.Major, v.Minor, Math.Max(0, v.Build)) : null;
+        if (t.IndexOf('+') is var plus and >= 0) t = t[..plus];
+        string? pre = null;
+        if (t.IndexOf('-') is var dash and > 0)
+        {
+            pre = t[(dash + 1)..];
+            t = t[..dash];
+            if (pre.Length == 0) pre = null;
+        }
+        return Version.TryParse(t, out var v) ? new ReleaseVersion(v.Major, v.Minor, Math.Max(0, v.Build), pre) : null;
     }
 
     /// <summary>Reads the JSON of GET /repos/{repo}/releases/latest.</summary>
-    public static ReleaseInfo? ParseRelease(string json)
+    public static ReleaseInfo? ParseRelease(string json) => ParseRelease(JsonNode.Parse(json));
+
+    /// <summary>
+    /// The newest release in the JSON of GET /repos/{repo}/releases, test releases included (drafts are skipped).
+    /// </summary>
+    public static ReleaseInfo? NewestRelease(string json) =>
+        (JsonNode.Parse(json) as JsonArray)?.OfType<JsonObject>()
+            .Where(r => r["draft"]?.GetValue<bool>() != true)
+            .Select(r => ParseRelease(r))
+            .OfType<ReleaseInfo>()
+            .MaxBy(r => r.Version);
+
+    static ReleaseInfo? ParseRelease(JsonNode? n)
     {
-        var n = JsonNode.Parse(json);
         var tag = n?["tag_name"]?.GetValue<string>();
         if (ParseVersion(tag) is not { } version) return null;
         var asset = (n!["assets"] as JsonArray)?.OfType<JsonObject>()
@@ -44,7 +104,7 @@ public static class Updater
         return new ReleaseInfo(version, tag!, n["html_url"]?.GetValue<string>() ?? $"https://github.com/{Repository}/releases",
             asset?["name"]?.GetValue<string>(), asset?["browser_download_url"]?.GetValue<string>(),
             digest != null && digest.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase) ? digest[7..].ToLowerInvariant() : null,
-            n["body"]?.GetValue<string>() ?? "");
+            n["body"]?.GetValue<string>() ?? "", n["prerelease"]?.GetValue<bool>() ?? version.IsPrerelease);
     }
 
     static string StateDir =>
@@ -133,13 +193,17 @@ public static class Updater
     }
 
     /// <param name="restartClaude">Passed to the installer: restart Claude Desktop when done, without asking.</param>
-    public static async Task<int> Run(bool install, bool restartClaude = false)
+    /// <param name="pre">Also consider test releases (e.g. 1.3.0-beta.1); without it only regular releases count.</param>
+    public static async Task<int> Run(bool install, bool restartClaude = false, bool pre = false)
     {
         using var http = Client();
         ReleaseInfo? latest;
         try
         {
-            latest = ParseRelease(await http.GetStringAsync($"https://api.github.com/repos/{Repository}/releases/latest"));
+            // /releases/latest never returns a test release; the list holds both kinds.
+            latest = pre
+                ? NewestRelease(await http.GetStringAsync($"https://api.github.com/repos/{Repository}/releases?per_page=30"))
+                : ParseRelease(await http.GetStringAsync($"https://api.github.com/repos/{Repository}/releases/latest"));
         }
         catch (Exception ex)
         {
@@ -151,13 +215,14 @@ public static class Updater
             Console.Error.WriteLine("the latest release has no readable version tag");
             return 1;
         }
-        SaveState(latest);
+        // 'status' reports regular releases only, so a test release found with --pre is not remembered.
+        if (!latest.Prerelease) SaveState(latest);
 
         Console.WriteLine($"installed: {Current}");
-        Console.WriteLine($"latest:    {latest.Version}  {latest.PageUrl}");
+        Console.WriteLine($"latest:    {latest.Version}{(latest.Prerelease ? " (test release)" : "")}  {latest.PageUrl}");
         if (latest.Version <= Current)
         {
-            Console.WriteLine("you have the latest version.");
+            Console.WriteLine(pre ? "you have the latest version (test releases included)." : "you have the latest version.");
             return 0;
         }
         if (!install)
@@ -168,7 +233,7 @@ public static class Updater
                 Console.WriteLine("\nchanges:");
                 foreach (var l in notes) Console.WriteLine("  " + l.Trim());
             }
-            Console.WriteLine("\ninstall it with: xpplens update --install   (Claude may stay open; your settings and index are kept)");
+            Console.WriteLine($"\ninstall it with: xpplens update --install{(pre ? " --pre" : "")}   (Claude may stay open; your settings and index are kept)");
             return 0;
         }
 

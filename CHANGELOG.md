@@ -3,6 +3,22 @@
 All notable changes to xpp-lens (called xpp-graft up to 1.2.0). Versions follow `<Version>` in
 `src/XppLens/XppLens.csproj`; release tags are `vX.Y.Z`.
 
+## 1.3.0 — unreleased
+
+### Added
+- Test releases: a version can first be published as `X.Y.Z-beta.N`, marked as a pre-release on GitHub.
+  `xpplens update` never offers it; `xpplens update --install --pre` installs the newest release including test
+  releases, so a new version can be tried on one machine before everyone gets it. The regular `X.Y.Z` later
+  replaces a test release through the usual `xpplens update --install`.
+- `xpplens version`, `status` and the MCP server report the full version of a test release (`1.3.0-beta.1`); versions
+  compare with test releases before their final version (`1.3.0-beta.2` < `1.3.0`).
+
+### Development
+- Work happens on the branch `dev`; `main` always holds the last regular release. `release.ps1 -Version X.Y.Z -Pre`
+  publishes a test release from `dev`; `release.ps1 -Version X.Y.Z` opens the pull request `dev` → `main`, waits
+  for its CI, merges it (merge commit), tags the merge and publishes the release, then moves `dev` to `main`.
+  CI also runs for pushes to `dev`. The release notes of a test release come from the section of its final version.
+
 ## 1.2.9 — 2026-10-14
 
 ### Fixed

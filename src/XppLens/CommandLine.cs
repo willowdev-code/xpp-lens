@@ -11,7 +11,7 @@ public sealed partial class CommandLine
     // "name=" takes a value, "name" is a switch.
     static readonly Dictionary<string, string[]> Known = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["update"] = ["install", "restart-claude"],
+        ["update"] = ["install", "restart-claude", "pre"],
         ["migrate"] = ["from=", "config="],
         ["stats"] = ["days=", "top="],
         ["mcp"] = [],

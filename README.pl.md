@@ -44,6 +44,7 @@ z nowszej paczki. Nie trzeba zamykać Claude'a: `xpplens.exe` używany przez otw
 (usuwaną później), więc ta sesja działa dalej na starej wersji, a nowe sesje startują już na nowej. Na końcu instalator
 proponuje ponowne uruchomienie Claude Desktop (`xpplens update --install --restart-claude` albo
 `install.ps1 -RestartClaude` — bez pytania); w Claude Code to samo dla jednej sesji daje `/mcp` → reconnect xpp-lens.
+Wydania testowe (`X.Y.Z-beta.N`) są proponowane tylko z `--pre`: `xpplens update --install --pre`.
 
 Przydatne parametry:
 
@@ -256,16 +257,20 @@ w `QueryTests.cs`, który woła zapytanie i sprawdza tekst odpowiedzi. Uruchamia
 
 ### Wydanie nowej wersji
 
-Dopisz w `CHANGELOG.md` sekcję `## X.Y.Z — unreleased`, potem:
+Praca idzie na gałęzi `dev`; `main` zawsze zawiera ostatnie zwykłe wydanie. Dopisz w `CHANGELOG.md` sekcję
+`## X.Y.Z — unreleased`, potem na `dev`:
 
 ```powershell
-.\release.ps1 -Version X.Y.Z          # wszystko poniżej, staje na pierwszym błędzie
+.\release.ps1 -Version X.Y.Z -Pre     # wydanie testowe X.Y.Z-beta.N (pre-release; xpplens update --install --pre)
+.\release.ps1 -Version X.Y.Z          # zwykłe wydanie: pull request dev -> main, scalenie, tag, publikacja
 .\release.ps1 -Version X.Y.Z -DryRun  # tylko kontrole, skan, build i testy
 ```
 
-Skrypt wstawia datę w sekcji, ustawia `<Version>`, skanuje wszystkie pliki pod nazwy prywatne, buduje i testuje,
-robi commit i push `main`, czeka na CI, zakłada tag, czeka na workflow Release i sprawdza opublikowaną paczkę
-(SHA-256, układ). Nazwy prywatne (klienci, partnerzy, ludzie) pochodzą z lokalnej listy, która nigdy nie trafia do
+Oba warianty stają na pierwszym błędzie. Ustawiają `<Version>`, skanują wszystkie pliki pod nazwy prywatne,
+budują i testują, robią commit i push `dev` i czekają na CI. Wydanie testowe dostaje tag na `dev`; zwykłe wstawia
+datę w sekcji CHANGELOG, scala `dev` do `main` przez pull request (zwykłe scalanie) i dostaje tag na `main`, po czym
+`dev` przesuwa się do `main`. Oba czekają na workflow Release i sprawdzają opublikowaną paczkę (SHA-256, układ,
+rodzaj wydania). Nazwy prywatne (klienci, partnerzy, ludzie) pochodzą z lokalnej listy, która nigdy nie trafia do
 repozytorium: `-ScanList <plik>`, zmienna `XPPLENS_SCAN_LIST` albo
 `%USERPROFILE%\.claude\skills\xpp-lens-release\scan-names.txt` — jedno wyrażenie regularne w linii, `!słowo` dla
 dozwolonych słów. Bez listy wydanie się zatrzymuje.
