@@ -3,6 +3,14 @@
 All notable changes to xpp-lens (called xpp-graft up to 1.2.0). Versions follow `<Version>` in
 `src/XppLens/XppLens.csproj`; release tags are `vX.Y.Z`.
 
+## 1.2.9 — unreleased
+
+### Development
+- `release.ps1 -Version X.Y.Z` releases a version end to end and stops at the first failure: CHANGELOG section and
+  free tag, `<Version>`, a scan for private names (customers, partners, people) from a local list that is never part
+  of the repository, Release build and tests, commit and push, CI, tag, Release workflow, and a check of the
+  published package (SHA-256 digest, layout). `-DryRun` runs the checks only.
+
 ## 1.2.8 — 2026-10-14
 
 ### Fixed

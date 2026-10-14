@@ -256,15 +256,21 @@ w `QueryTests.cs`, który woła zapytanie i sprawdza tekst odpowiedzi. Uruchamia
 
 ### Wydanie nowej wersji
 
-1. Ustaw `<Version>` w `src\XppLens\XppLens.csproj` i dopisz jej sekcję `## X.Y.Z — data` w `CHANGELOG.md`.
-2. Commit, push na `main` i poczekaj na zielone CI.
-3. Utwórz i wypchnij tag:
+Dopisz w `CHANGELOG.md` sekcję `## X.Y.Z — unreleased`, potem:
 
 ```powershell
-git tag vX.Y.Z
-git push origin vX.Y.Z
+.\release.ps1 -Version X.Y.Z          # wszystko poniżej, staje na pierwszym błędzie
+.\release.ps1 -Version X.Y.Z -DryRun  # tylko kontrole, skan, build i testy
 ```
 
+Skrypt wstawia datę w sekcji, ustawia `<Version>`, skanuje wszystkie pliki pod nazwy prywatne, buduje i testuje,
+robi commit i push `main`, czeka na CI, zakłada tag, czeka na workflow Release i sprawdza opublikowaną paczkę
+(SHA-256, układ). Nazwy prywatne (klienci, partnerzy, ludzie) pochodzą z lokalnej listy, która nigdy nie trafia do
+repozytorium: `-ScanList <plik>`, zmienna `XPPLENS_SCAN_LIST` albo
+`%USERPROFILE%\.claude\skills\xpp-lens-release\scan-names.txt` — jedno wyrażenie regularne w linii, `!słowo` dla
+dozwolonych słów. Bez listy wydanie się zatrzymuje.
+
+Ręcznie: ustaw `<Version>`, commit, push, poczekaj na zielone CI, potem `git tag vX.Y.Z` i `git push origin vX.Y.Z`.
 Workflow Release uruchamia wtedy testy, sprawdza zgodność tagu z `<Version>`, buduje `xpp-lens-X.Y.Z.zip`
 przez `pack.ps1` i publikuje wydanie z opisem z `CHANGELOG.md` (podgląd: `.\release-notes.ps1 -Version X.Y.Z`).
 Tagi wydań są chronione: opublikowanej wersji nie da się zmienić — poprawki idą do nowej wersji.

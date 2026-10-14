@@ -255,15 +255,20 @@ Adding a test: put the XML the case needs into `Fixtures` (keep names neutral �
 
 ### Releasing a new version
 
-1. Set `<Version>` in `src\XppLens\XppLens.csproj` and add its section `## X.Y.Z — date` to `CHANGELOG.md`.
-2. Commit, push to `main` and wait for the green CI.
-3. Tag and push the tag:
+Add the section `## X.Y.Z — unreleased` to `CHANGELOG.md`, then:
 
 ```powershell
-git tag vX.Y.Z
-git push origin vX.Y.Z
+.\release.ps1 -Version X.Y.Z          # everything below, stops at the first failure
+.\release.ps1 -Version X.Y.Z -DryRun  # checks, scan, build and tests only
 ```
 
+It dates the section, sets `<Version>`, scans every file for private names, builds and tests, commits and pushes
+`main`, waits for CI, tags, waits for the Release workflow and checks the published package (SHA-256, layout).
+The private names (customers, partners, people) come from a local list that is never part of the repository:
+`-ScanList <file>`, the `XPPLENS_SCAN_LIST` variable, or `%USERPROFILE%\.claude\skills\xpp-lens-release\scan-names.txt`
+— one regular expression per line, `!word` for allowed words. Without the list the release stops.
+
+By hand: set `<Version>`, commit, push, wait for the green CI, then `git tag vX.Y.Z` and `git push origin vX.Y.Z`.
 The Release workflow then runs the tests, checks that the tag matches `<Version>`, builds `xpp-lens-X.Y.Z.zip`
 with `pack.ps1` and publishes the release with its notes from `CHANGELOG.md` (preview them with
 `.\release-notes.ps1 -Version X.Y.Z`). Release tags are protected: a published version cannot be changed — fixes
