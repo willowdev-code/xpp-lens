@@ -5,11 +5,16 @@ All notable changes to xpp-lens (called xpp-graft up to 1.2.0). Versions follow 
 
 ## 1.2.9 — 2026-10-14
 
+### Fixed
+- The file properties of `xpplens.exe` showed a garbled title and copyright (`xpp-lens â€” …`, `Copyright Â©`):
+  the project file held those characters double-encoded.
+
 ### Development
 - `release.ps1 -Version X.Y.Z` releases a version end to end and stops at the first failure: CHANGELOG section and
   free tag, `<Version>`, a scan for private names (customers, partners, people) from a local list that is never part
   of the repository, Release build and tests, commit and push, CI, tag, Release workflow, and a check of the
-  published package (SHA-256 digest, layout). `-DryRun` runs the checks only.
+  published package (SHA-256 digest, layout). `-DryRun` runs the checks only. JSON from the GitHub CLI is filtered
+  in PowerShell: Windows PowerShell 5.1 drops the inner quotes of a `--jq` filter passed to a native program.
 
 ## 1.2.8 — 2026-10-14
 

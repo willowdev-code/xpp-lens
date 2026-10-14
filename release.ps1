@@ -135,12 +135,21 @@ git push --quiet origin main; Native 'git push'
 $sha = (git rev-parse HEAD).Trim()
 Ok "pushed $sha"
 
-function Wait-Run([string]$workflow, [string]$filterJq, [string]$label) {
+# JSON from gh is filtered here, not with --jq: Windows PowerShell 5.1 drops the inner double quotes of an argument
+# passed to a native program, so a jq filter like select(.headSha=="abc") would arrive broken.
+function Gh-Json([string[]]$ghArgs) {
+    $out = & $gh @ghArgs
+    if ($LASTEXITCODE -ne 0) { return $null }
+    return (($out -join "`n") | ConvertFrom-Json)
+}
+
+function Wait-Run([string]$workflow, [scriptblock]$match, [string]$label) {
     $deadline = (Get-Date).AddMinutes($TimeoutMinutes)
     $id = $null
     while (-not $id -and (Get-Date) -lt $deadline) {
         Start-Sleep -Seconds 5
-        $id = & $gh run list --workflow $workflow --limit 20 --json 'databaseId,headSha,headBranch' --jq $filterJq | Select-Object -First 1
+        $runs = Gh-Json @('run', 'list', '--workflow', $workflow, '--limit', '20', '--json', 'databaseId,headSha,headBranch')
+        $id = (@($runs) | Where-Object $match | Select-Object -First 1).databaseId
     }
     if (-not $id) { Fail "$label run did not start within $TimeoutMinutes minutes" }
     Ok "$label run $id ..."
@@ -149,18 +158,19 @@ function Wait-Run([string]$workflow, [string]$filterJq, [string]$label) {
     if ($conclusion -ne 'success') { Fail "$label run $id ended with '$conclusion' - see: gh run view $id --log-failed" }
     Ok "${label}: success"
 }
-Wait-Run 'ci.yml' ".[] | select(.headSha==`"$sha`") | .databaseId" 'CI'
+Wait-Run 'ci.yml' { $_.headSha -eq $sha } 'CI'
 
 # ---------------------------------------------------------------- 6. tag, release workflow
 Step "6/7 Tag $tag, Release workflow"
 git tag $tag $sha; Native 'git tag'
 git push --quiet origin $tag; Native 'git push tag'
-Wait-Run 'release.yml' ".[] | select(.headBranch==`"$tag`") | .databaseId" 'Release'
+Wait-Run 'release.yml' { $_.headBranch -eq $tag } 'Release'
 
 # ---------------------------------------------------------------- 7. published package
 Step "7/7 Published package"
 $asset = "xpp-lens-$Version.zip"
-$digest = (& $gh release view $tag --json assets --jq ".assets[] | select(.name==`"$asset`") | .digest").Trim()
+$release = Gh-Json @('release', 'view', $tag, '--json', 'assets')
+$digest = (@($release.assets) | Where-Object { $_.name -eq $asset } | Select-Object -First 1).digest
 if (-not $digest) { Fail "release $tag has no $asset" }
 $tmp = Join-Path ([IO.Path]::GetTempPath()) "xpp-lens-release-check-$Version"
 if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }

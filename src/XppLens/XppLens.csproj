@@ -17,9 +17,9 @@
     <Company>WillowDev</Company>
     <Authors>WillowDev</Authors>
     <Product>xpp-lens</Product>
-    <AssemblyTitle>xpp-lens â€” X++ code index for MCP</AssemblyTitle>
+    <AssemblyTitle>xpp-lens — X++ code index for MCP</AssemblyTitle>
     <Description>X++ (Dynamics 365 F&amp;O) code index served to AI assistants over MCP</Description>
-    <Copyright>Copyright Â© 2026 WillowDev</Copyright>
+    <Copyright>Copyright © 2026 WillowDev</Copyright>
     <Version>1.2.9</Version>
   </PropertyGroup>
 
