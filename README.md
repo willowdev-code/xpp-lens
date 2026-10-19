@@ -13,9 +13,17 @@ An independent project, inspired by [Graft](https://github.com/trailhq/Graft) (a
 
 ## Installing on a new machine
 
-The install package is not part of the repository (`dist\` is excluded by `.gitignore`). There are two ways:
+The install package is not part of the repository (`dist\` is excluded by `.gitignore`). There are three ways:
 
-**A. From a release package** — nothing needs to be installed on the target machine, not even .NET.
+**A. Setup program** (from 1.3.0) — download `xpp-lens-setup-X.Y.Z.exe` from the **Releases** tab and run it. A
+wizard in Polish or English, for the current user, no administrator rights: it finds `PackagesLocalDirectory`, asks for
+the label languages and whether to index the Microsoft standard, registers xpp-lens in Claude and offers to build the
+index. It puts `xpplens` on your PATH, adds Start menu entries (status, update the index, check for updates) and an
+entry in Windows' installed apps. An installation made by `install.ps1` in `C:\Tools\xpp-lens` is taken over in place,
+with its settings and index. The program is not signed yet: when Windows shows "Windows protected your PC", choose
+"More info" → "Run anyway".
+
+**B. From the release ZIP** — nothing needs to be installed on the target machine, not even .NET.
 
 1. Download `xpp-lens-X.Y.Z.zip` from the **Releases** tab of this repository.
 2. Unzip it and run in a regular PowerShell window (not as administrator):
@@ -24,12 +32,12 @@ The install package is not part of the repository (`dist\` is excluded by `.giti
 powershell -ExecutionPolicy Bypass -File .\xpp-lens\install.ps1 -Languages en-US,pl
 ```
 
-**B. From source** — requires the .NET 9 SDK.
+**C. From source** — requires the .NET 9 SDK (and Inno Setup 6 for the setup program).
 
 ```powershell
 git clone https://github.com/willowdev-code/xpp-lens.git C:\Dev\xpp-lens
 cd C:\Dev\xpp-lens
-.\pack.ps1                     # creates dist\xpp-lens\ and dist\xpp-lens-X.Y.Z.zip
+.\pack.ps1                     # dist\xpp-lens\, dist\xpp-lens-X.Y.Z.zip (and the setup program when Inno Setup is there)
 powershell -ExecutionPolicy Bypass -File .\dist\xpp-lens\install.ps1 -Languages en-US,pl
 ```
 
@@ -39,8 +47,8 @@ builds the index (custom models take about a minute, the Microsoft standard 20�
 Claude may stay open: start a new session afterwards (or restart Claude Desktop) to load the server.
 
 Updating an installation: `xpplens update` shows whether a newer release exists; `xpplens update --install` downloads
-it (SHA-256 checked) and runs its installer — settings and index are kept. Running `install.ps1` from a newer package
-does the same. Claude does not have to be closed: an `xpplens.exe` used by an open session is renamed to `*.old`
+it (SHA-256 checked) and runs its installer — from 1.3.0 the setup program, silently, into the current installation;
+settings and index are kept. Running the setup program or `install.ps1` from a newer package does the same. Claude does not have to be closed: an `xpplens.exe` used by an open session is renamed to `*.old`
 (deleted later), so that session keeps the old version and new sessions start the new one. At the end the installer
 offers to restart Claude Desktop (`xpplens update --install --restart-claude` or `install.ps1 -RestartClaude`: without
 asking); in Claude Code `/mcp` → reconnect xpp-lens does the same for one session. Test releases (`X.Y.Z-beta.N`)

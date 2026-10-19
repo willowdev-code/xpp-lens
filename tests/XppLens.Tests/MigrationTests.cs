@@ -198,6 +198,21 @@ public class UpdaterTests
     }
 
     [Fact]
+    public void Release_with_a_setup_program_offers_it()
+    {
+        var r = Updater.ParseRelease("""
+            { "tag_name": "v1.3.0", "assets": [
+                { "name": "xpp-lens-1.3.0.zip", "browser_download_url": "https://example.invalid/z.zip", "digest": "sha256:AA" },
+                { "name": "xpp-lens-setup-1.3.0.exe", "browser_download_url": "https://example.invalid/s.exe", "digest": "sha256:BB" } ] }
+            """)!;
+        Assert.Equal("xpp-lens-1.3.0.zip", r.AssetName);
+        Assert.Equal(new Updater.ReleaseAsset("xpp-lens-setup-1.3.0.exe", "https://example.invalid/s.exe", "bb"), r.Setup);
+        Assert.Null(Updater.ParseRelease(Release)!.Setup);
+        Assert.Equal("/SILENT /SUPPRESSMSGBOXES /NORESTART /DIR=\"C:\\Tools\\xpp-lens\"", Updater.SetupArguments(@"C:\Tools\xpp-lens\", false));
+        Assert.EndsWith(" /RESTARTCLAUDE=1", Updater.SetupArguments(@"C:\Tools\xpp-lens", true));
+    }
+
+    [Fact]
     public void Release_without_package_has_no_asset()
     {
         var r = Updater.ParseRelease("""{ "tag_name": "v2.0.0", "assets": [] }""")!;

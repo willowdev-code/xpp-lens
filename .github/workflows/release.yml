@@ -41,9 +41,13 @@ jobs:
         shell: powershell
         run: .\release-notes.ps1 -Version $env:VERSION -OutFile dist\notes.md
 
-      - name: Package
+      - name: Inno Setup
+        shell: pwsh
+        run: ./.github/install-inno.ps1
+
+      - name: Package and setup program
         shell: powershell
-        run: .\pack.ps1 -OutDir dist
+        run: .\pack.ps1 -OutDir dist -Installer
 
       # vX.Y.Z-beta.N is a test release: marked as pre-release, never "Latest", so 'xpplens update' does not offer it
       # ('xpplens update --pre' does).
@@ -53,4 +57,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $kind = if ($env:TAG -match '-') { '--prerelease' } else { '--latest' }
-          gh release create $env:TAG "dist/xpp-lens-$env:VERSION.zip" --title "xpp-lens $env:VERSION" --notes-file dist/notes.md --verify-tag $kind
+          gh release create $env:TAG "dist/xpp-lens-$env:VERSION.zip" "dist/xpp-lens-setup-$env:VERSION.exe" --title "xpp-lens $env:VERSION" --notes-file dist/notes.md --verify-tag $kind

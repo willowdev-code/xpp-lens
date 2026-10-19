@@ -51,8 +51,11 @@ public static class Updater
 {
     public const string Repository = "willowdev-code/xpp-lens";
 
+    /// <param name="Setup">The setup program of the release (xpp-lens-setup-X.Y.Z.exe, from 1.3.0), when it has one.</param>
     public sealed record ReleaseInfo(ReleaseVersion Version, string Tag, string PageUrl, string? AssetName, string? AssetUrl, string? Sha256,
-        string Notes, bool Prerelease = false);
+        string Notes, bool Prerelease = false, ReleaseAsset? Setup = null);
+
+    public sealed record ReleaseAsset(string Name, string Url, string? Sha256);
 
     /// <summary>
     /// The running version, with a test-release suffix ("1.3.0-beta.1") — from the informational version, which keeps
@@ -96,15 +99,20 @@ public static class Updater
     {
         var tag = n?["tag_name"]?.GetValue<string>();
         if (ParseVersion(tag) is not { } version) return null;
-        var asset = (n!["assets"] as JsonArray)?.OfType<JsonObject>()
-            .FirstOrDefault(a => a["name"]?.GetValue<string>() is { } name
-                                 && name.StartsWith("xpp-lens-", StringComparison.OrdinalIgnoreCase)
-                                 && name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
-        var digest = asset?["digest"]?.GetValue<string>();
+        var assets = (n!["assets"] as JsonArray)?.OfType<JsonObject>().ToList() ?? [];
+        JsonObject? Find(string prefix, string extension) => assets.FirstOrDefault(a => a["name"]?.GetValue<string>() is { } name
+            && name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) && name.EndsWith(extension, StringComparison.OrdinalIgnoreCase));
+        static string? Sha(JsonObject? a) => a?["digest"]?.GetValue<string>() is { } d && d.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase)
+            ? d[7..].ToLowerInvariant()
+            : null;
+        var asset = Find("xpp-lens-", ".zip");
+        var setup = Find("xpp-lens-setup-", ".exe");
         return new ReleaseInfo(version, tag!, n["html_url"]?.GetValue<string>() ?? $"https://github.com/{Repository}/releases",
-            asset?["name"]?.GetValue<string>(), asset?["browser_download_url"]?.GetValue<string>(),
-            digest != null && digest.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase) ? digest[7..].ToLowerInvariant() : null,
-            n["body"]?.GetValue<string>() ?? "", n["prerelease"]?.GetValue<bool>() ?? version.IsPrerelease);
+            asset?["name"]?.GetValue<string>(), asset?["browser_download_url"]?.GetValue<string>(), Sha(asset),
+            n["body"]?.GetValue<string>() ?? "", n["prerelease"]?.GetValue<bool>() ?? version.IsPrerelease,
+            setup?["browser_download_url"]?.GetValue<string>() is { } setupUrl
+                ? new ReleaseAsset(setup["name"]!.GetValue<string>(), setupUrl, Sha(setup))
+                : null);
     }
 
     static string StateDir =>
@@ -237,6 +245,11 @@ public static class Updater
             return 0;
         }
 
+        // From 1.3.0 a release has a setup program: it is run silently into this installation. Older releases (and a
+        // release without its digest) go the ZIP + install.ps1 way.
+        if (latest.Setup is { Sha256: not null } setup)
+            return await RunSetup(http, latest, setup, restartClaude);
+
         if (latest.AssetUrl == null || latest.AssetName == null)
         {
             Console.Error.WriteLine($"release {latest.Tag} has no xpp-lens-*.zip package - download it from {latest.PageUrl}");
@@ -287,6 +300,39 @@ public static class Updater
         Console.WriteLine(restartClaude
             ? "Claude Desktop is restarted when it is done."
             : "At the end it offers to restart Claude Desktop; otherwise running sessions keep the old version until restarted.");
+        return 0;
+    }
+
+    /// <summary>The arguments of a silent update by the setup program into <paramref name="installDir"/>.</summary>
+    internal static string SetupArguments(string installDir, bool restartClaude) =>
+        $"/SILENT /SUPPRESSMSGBOXES /NORESTART /DIR=\"{installDir.TrimEnd('\\')}\"" + (restartClaude ? " /RESTARTCLAUDE=1" : "");
+
+    static async Task<int> RunSetup(HttpClient http, ReleaseInfo latest, ReleaseAsset setup, bool restartClaude)
+    {
+        var work = Path.Combine(Path.GetTempPath(), $"xpp-lens-update-{latest.Version}");
+        if (Directory.Exists(work)) Directory.Delete(work, recursive: true);
+        Directory.CreateDirectory(work);
+        var exe = Path.Combine(work, setup.Name);
+        Console.WriteLine($"downloading {setup.Name}…");
+        await using (var src = await http.GetStreamAsync(setup.Url))
+        await using (var dst = File.Create(exe))
+            await src.CopyToAsync(dst);
+
+        var actual = Sha256Of(exe);
+        if (!actual.Equals(setup.Sha256, StringComparison.OrdinalIgnoreCase))
+        {
+            Console.Error.WriteLine($"SHA-256 mismatch for {setup.Name}: expected {setup.Sha256}, got {actual} - not installing");
+            return 1;
+        }
+        Console.WriteLine($"SHA-256 verified: {actual}");
+
+        // The setup program renames this running xpplens.exe and copies the new one; settings and index are kept.
+        var target = InstallDir();
+        Process.Start(new ProcessStartInfo { FileName = exe, Arguments = SetupArguments(target, restartClaude), UseShellExecute = true });
+        Console.WriteLine($"the setup program updates {target} in its own window (progress only, no questions).");
+        Console.WriteLine(restartClaude
+            ? "Claude Desktop is restarted when it is done."
+            : "Running Claude sessions keep the old version until restarted; new sessions use the new one.");
         return 0;
     }
 }

@@ -241,6 +241,17 @@ foreach ($e in 'xpp-lens/install.ps1', 'xpp-lens/bin/xpplens.exe', 'xpp-lens/CHA
 }
 Ok "${asset}: SHA-256 matches, layout ok, $(if ($Pre) { 'test release' } else { 'regular release' })"
 
+# The setup program: present, with a digest that matches what is downloaded (xpplens update --install uses it).
+$setupName = "xpp-lens-setup-$fullVersion.exe"
+$setupDigest = (@($release.assets) | Where-Object { $_.name -eq $setupName } | Select-Object -First 1).digest
+if (-not $setupDigest) { Fail "release $tag has no $setupName" }
+New-Item -ItemType Directory $tmp | Out-Null
+& $gh release download $tag --pattern $setupName --dir $tmp; Native 'gh release download (setup)'
+$setupSha = (Get-FileHash (Join-Path $tmp $setupName) -Algorithm SHA256).Hash.ToLowerInvariant()
+Remove-Item $tmp -Recurse -Force
+if ("sha256:$setupSha" -ne $setupDigest) { Fail "downloaded $setupName does not match the published digest ($setupDigest)" }
+Ok "${setupName}: SHA-256 matches"
+
 if (-not $Pre) {
     # main = dev + the merge commit: dev moves forward to it, so the next pull request starts clean.
     git merge --quiet --ff-only origin/main

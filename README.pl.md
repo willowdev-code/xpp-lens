@@ -13,9 +13,17 @@ Niezależny projekt inspirowany [Graftem](https://github.com/trailhq/Graft) (gra
 
 ## Instalacja na nowej maszynie
 
-Paczki instalacyjnej nie ma w repozytorium (`dist\` jest pomijany przez `.gitignore`). Są dwie drogi:
+Paczki instalacyjnej nie ma w repozytorium (`dist\` jest pomijany przez `.gitignore`). Są trzy drogi:
 
-**A. Z gotowej paczki** — na maszynie docelowej nie trzeba niczego instalować, nawet .NET.
+**A. Instalator** (od 1.3.0) — pobierz `xpp-lens-setup-X.Y.Z.exe` z zakładki **Releases** i uruchom. Kreator po polsku
+albo po angielsku, dla bieżącego użytkownika, bez uprawnień administratora: wykrywa `PackagesLocalDirectory`, pyta
+o języki etykiet i o indeksowanie standardu Microsoftu, rejestruje xpp-lens w Claude i proponuje zbudowanie indeksu.
+Dopisuje `xpplens` do PATH, dodaje skróty w menu Start (status, aktualizacja indeksu, sprawdzenie aktualizacji) i wpis
+w „Aplikacjach” Windows. Instalację zrobioną przez `install.ps1` w `C:\Tools\xpp-lens` przejmuje w miejscu, razem
+z ustawieniami i indeksem. Program nie jest jeszcze podpisany: gdy Windows pokaże „System Windows ochronił komputer”,
+wybierz „Więcej informacji” → „Uruchom mimo to”.
+
+**B. Z paczki ZIP** — na maszynie docelowej nie trzeba niczego instalować, nawet .NET.
 
 1. Pobierz `xpp-lens-X.Y.Z.zip` z zakładki **Releases** tego repozytorium.
 2. Rozpakuj i w zwykłym PowerShellu (nie jako administrator) uruchom:
@@ -24,12 +32,12 @@ Paczki instalacyjnej nie ma w repozytorium (`dist\` jest pomijany przez `.gitign
 powershell -ExecutionPolicy Bypass -File .\xpp-lens\install.ps1 -Languages en-US,pl
 ```
 
-**B. Z kodu źródłowego** — wymaga .NET 9 SDK.
+**C. Z kodu źródłowego** — wymaga .NET 9 SDK (i Inno Setup 6 dla instalatora).
 
 ```powershell
 git clone https://github.com/willowdev-code/xpp-lens.git C:\Dev\xpp-lens
 cd C:\Dev\xpp-lens
-.\pack.ps1                     # tworzy dist\xpp-lens\ i dist\xpp-lens-X.Y.Z.zip
+.\pack.ps1                     # dist\xpp-lens\, dist\xpp-lens-X.Y.Z.zip (i instalator, gdy jest Inno Setup)
 powershell -ExecutionPolicy Bypass -File .\dist\xpp-lens\install.ps1 -Languages en-US,pl
 ```
 
@@ -39,8 +47,8 @@ układu katalogów), zapisuje konfigurację, rejestruje serwer w Claude Desktop 
 otwarty: po instalacji zacznij nową sesję (albo uruchom ponownie Claude Desktop), żeby wczytał serwer.
 
 Aktualizacja instalacji: `xpplens update` pokazuje, czy jest nowsze wydanie; `xpplens update --install` pobiera je
-(z kontrolą SHA-256) i uruchamia jego instalator — ustawienia i indeks zostają. To samo daje uruchomienie `install.ps1`
-z nowszej paczki. Nie trzeba zamykać Claude'a: `xpplens.exe` używany przez otwartą sesję dostaje nazwę `*.old`
+(z kontrolą SHA-256) i uruchamia jego instalator — od 1.3.0 kreator, po cichu, do bieżącej instalacji; ustawienia
+i indeks zostają. To samo daje uruchomienie instalatora albo `install.ps1` z nowszej paczki. Nie trzeba zamykać Claude'a: `xpplens.exe` używany przez otwartą sesję dostaje nazwę `*.old`
 (usuwaną później), więc ta sesja działa dalej na starej wersji, a nowe sesje startują już na nowej. Na końcu instalator
 proponuje ponowne uruchomienie Claude Desktop (`xpplens update --install --restart-claude` albo
 `install.ps1 -RestartClaude` — bez pytania); w Claude Code to samo dla jednej sesji daje `/mcp` → reconnect xpp-lens.

@@ -6,6 +6,15 @@ All notable changes to xpp-lens (called xpp-graft up to 1.2.0). Versions follow 
 ## 1.3.0 — unreleased
 
 ### Added
+- Setup program `xpp-lens-setup-X.Y.Z.exe` (Inno Setup): a wizard in Polish or English for the current user, no
+  administrator rights. It finds PackagesLocalDirectory (`xpplens detect`, or choose the folder), asks for the label
+  languages and whether to index the Microsoft standard, registers xpp-lens in Claude Desktop and Claude Code and
+  offers to build the index. It puts `xpplens` on the user's PATH, adds Start menu entries (status, update the index,
+  check for updates, uninstall) and an entry in Windows' installed apps; uninstalling asks whether to remove the index.
+  An installation made by `install.ps1` (`C:\Tools\xpp-lens`) is taken over in place with its settings and index.
+- `xpplens update --install` runs the setup program of the release silently into the current installation (SHA-256
+  checked, `--restart-claude` passed on); releases without one still go through the ZIP and `install.ps1`.
+- `restart-claude.ps1`: the Claude Desktop restart of the installers, shared by `install.ps1` and the setup program.
 - Test releases: a version can first be published as `X.Y.Z-beta.N`, marked as a pre-release on GitHub.
   `xpplens update` never offers it; `xpplens update --install --pre` installs the newest release including test
   releases, so a new version can be tried on one machine before everyone gets it. The regular `X.Y.Z` later
