@@ -113,7 +113,7 @@ public static class McpTools
     [McpServerTool(Name = "xpp_refs", ReadOnly = true, Idempotent = true)]
     [Description("All references to an object or member: code (calls, types, fields — also on chained receivers, intrinsics, labels) and metadata (EDT/enum of fields, form data sources/controls, menu items, security entry points…). Use member for a table field or method, or a label id like @Contoso:MyLabel as name.")]
     public static string Refs(Queries q,
-        [Description("Referenced object name (class, table, EDT, enum, menu item, form…) or label id @File:Key")] string name,
+        [Description("Referenced object name (class, table, EDT, enum, menu item, form…), 'Table.Field' / 'Class::method', or label id @File:Key")] string name,
         [Description("Optional member: field or method name")] string? member = null,
         [Description("Optional kind: call, new, type, member, static, intrinsic, meta, label, coc, handler, extends, implements, extension")] string? kind = null,
         [Description("Optional model/package filter of the referencing code")] string? model = null,

@@ -3,6 +3,17 @@
 All notable changes to xpp-lens (called xpp-graft up to 1.2.0). Versions follow `<Version>` in
 `src/XppLens/XppLens.csproj`; release tags are `vX.Y.Z`.
 
+## 1.3.1 — 2026-10-26
+
+### Fixed
+- `xpp_refs name="Table.Field"` answered "no references": the whole text was taken as an object name, while
+  `xpp_find` takes that form. `xpp_refs` now reads `Table.Field` / `Class::method` as the object and its member
+  (unless an object has that whole name, as extensions named `Base.Model` do) and says how it read the name, so the
+  answer equals `name=Table member=Field`: code reads (also after `Table::find().Field`) and form controls.
+- `xpp_object` did not show whether a table is per company: the XML leaves out `SaveDataPerCompany` and `TableType`
+  when they have their default values. Tables now always list them, marked `(default)` when not in the file, and
+  `xpp_find property=SaveDataPerCompany` reports `Yes` for those tables instead of `-`.
+
 ## 1.3.0 — 2026-10-26
 
 ### Added
