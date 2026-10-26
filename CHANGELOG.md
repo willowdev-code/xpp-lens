@@ -3,6 +3,14 @@
 All notable changes to xpp-lens (called xpp-graft up to 1.2.0). Versions follow `<Version>` in
 `src/XppLens/XppLens.csproj`; release tags are `vX.Y.Z`.
 
+## 1.3.3
+
+### Added
+- An icon (a lens over X++ on a violet tile) for `xpplens.exe`, the setup program, the Start menu and Windows'
+  installed apps; drawn by `packaging/icon/make-icon.ps1`.
+- Start menu entry `xpp-lens`: a console that shows the command list and takes any `xpplens` command, also right
+  after installing, before Explorer picks up the new PATH.
+
 ## 1.3.2 — 2026-10-26
 
 ### Fixed

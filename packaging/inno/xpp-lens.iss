@@ -30,6 +30,7 @@ DisableDirPage=yes
 DisableProgramGroupPage=yes
 DefaultGroupName=xpp-lens
 DisableReadyPage=yes
+SetupIconFile={#SourcePath}..\icon\xpplens.ico
 ; The program folder goes on the user's PATH, so "xpplens" works in any new terminal.
 ChangesEnvironment=yes
 PrivilegesRequired=lowest
@@ -56,6 +57,9 @@ Source: "{#Source}\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
 
 [Icons]
 ; Start menu: commands open in a console that stays open (xpplens commands work there too).
+; "xpp-lens" is the general one: the command list, then any xpplens command (PATH set here too,
+; in case Explorer has not picked up the new PATH yet).
+Name: "{group}\xpp-lens"; Filename: "{cmd}"; Parameters: "/k ""title xpp-lens & set ""PATH={app}\bin;%PATH%"" & xpplens help"""; WorkingDir: "{%USERPROFILE}"; IconFilename: "{app}\bin\xpplens.exe"; Comment: "{cm:IconConsole}"
 Name: "{group}\{cm:IconStatus}"; Filename: "{cmd}"; Parameters: "/k """"{app}\bin\xpplens.exe"" status"""; WorkingDir: "{app}"; IconFilename: "{app}\bin\xpplens.exe"
 Name: "{group}\{cm:IconBuild}"; Filename: "{cmd}"; Parameters: "/k """"{app}\bin\xpplens.exe"" build"""; WorkingDir: "{app}"; IconFilename: "{app}\bin\xpplens.exe"
 Name: "{group}\{cm:IconUpdate}"; Filename: "{cmd}"; Parameters: "/k """"{app}\bin\xpplens.exe"" update"""; WorkingDir: "{app}"; IconFilename: "{app}\bin\xpplens.exe"
@@ -98,6 +102,7 @@ en.BuildNow=Build the index now (a console window shows the progress)
 en.RestartClaude=Restart Claude Desktop so all its sessions use the new version (interrupts work in progress there)
 en.OpenReadme=Read how to use xpp-lens
 en.ReadmeUrl=https://github.com/willowdev-code/xpp-lens#readme
+en.IconConsole=Console with the xpplens commands
 en.IconStatus=xpp-lens - status
 en.IconBuild=xpp-lens - update the index
 en.IconUpdate=xpp-lens - check for updates
@@ -124,6 +129,7 @@ pl.BuildNow=Zbuduj indeks teraz (okno konsoli pokaże postęp)
 pl.RestartClaude=Uruchom ponownie Claude Desktop, żeby wszystkie jego sesje używały nowej wersji (przerywa trwającą tam pracę)
 pl.OpenReadme=Przeczytaj, jak używać xpp-lens
 pl.ReadmeUrl=https://github.com/willowdev-code/xpp-lens/blob/main/README.pl.md
+pl.IconConsole=Konsola z poleceniami xpplens
 pl.IconStatus=xpp-lens - status
 pl.IconBuild=xpp-lens - aktualizacja indeksu
 pl.IconUpdate=xpp-lens - sprawdź aktualizacje

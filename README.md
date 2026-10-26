@@ -18,7 +18,7 @@ The install package is not part of the repository (`dist\` is excluded by `.giti
 **A. Setup program** (from 1.3.0) — download `xpp-lens-setup-X.Y.Z.exe` from the **Releases** tab and run it. A
 wizard in Polish or English, for the current user, no administrator rights: it finds `PackagesLocalDirectory`, asks for
 the label languages and whether to index the Microsoft standard, registers xpp-lens in Claude and offers to build the
-index. It puts `xpplens` on your PATH, adds Start menu entries (status, update the index, check for updates) and an
+index. It puts `xpplens` on your PATH, adds Start menu entries (an `xpp-lens` console with the command list, status, update the index, check for updates) and an
 entry in Windows' installed apps. An installation made by `install.ps1` in `C:\Tools\xpp-lens` is taken over in place,
 with its settings and index. The program is not signed yet: when Windows shows "Windows protected your PC", choose
 "More info" → "Run anyway".

@@ -11,6 +11,8 @@
     <ServerGarbageCollection>false</ServerGarbageCollection>
     <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <!-- Drawn by packaging/icon/make-icon.ps1; shown in Explorer, Settings -> Apps and the Start menu. -->
+    <ApplicationIcon>..\..\packaging\icon\xpplens.ico</ApplicationIcon>
   </PropertyGroup>
 
   <PropertyGroup>
