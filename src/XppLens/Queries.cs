@@ -663,10 +663,12 @@ public sealed partial class Queries(IndexService svc)
     {
         if (e.Type == "AxClass")
         {
-            var wraps = s.Query("SELECT DISTINCT member FROM refs WHERE object_id = $id AND kind = 'coc' AND via = 'next' AND member IS NOT NULL ORDER BY member",
-                ("$id", e.Id)).Select(r => r.GetString(0)).ToList();
-            var of = s.Query("SELECT via, member FROM refs WHERE object_id = $id AND kind = 'coc' AND method_id = (SELECT MIN(id) FROM methods WHERE object_id = $id AND name = 'classDeclaration') LIMIT 1",
-                ("$id", e.Id)).Select(r => $"{r.GetString(0)}{(r.IsDBNull(1) ? "" : ":" + r.GetString(1))}").FirstOrDefault();
+            // file_id first: refs has no index on object_id, but one on file_id (an object lives in one file) —
+            // without it each extension class meant a scan of the whole refs table.
+            var wraps = s.Query("SELECT DISTINCT member FROM refs WHERE file_id = $fid AND object_id = $id AND kind = 'coc' AND via = 'next' AND member IS NOT NULL ORDER BY member",
+                ("$fid", e.FileId), ("$id", e.Id)).Select(r => r.GetString(0)).ToList();
+            var of = s.Query("SELECT via, member FROM refs WHERE file_id = $fid AND object_id = $id AND kind = 'coc' AND method_id = (SELECT MIN(id) FROM methods WHERE object_id = $id AND name = 'classDeclaration') LIMIT 1",
+                ("$fid", e.FileId), ("$id", e.Id)).Select(r => $"{r.GetString(0)}{(r.IsDBNull(1) ? "" : ":" + r.GetString(1))}").FirstOrDefault();
             var parts = new List<string>();
             if (of != null && !of.StartsWith("classStr", StringComparison.OrdinalIgnoreCase) && !of.StartsWith("tableStr", StringComparison.OrdinalIgnoreCase)) parts.Add(of);
             if (wraps.Count > 0) parts.Add("wraps " + string.Join(", ", wraps));

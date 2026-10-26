@@ -68,6 +68,9 @@ public sealed class Store : IDisposable
     {
         // Cache tables of a 1.2 pre-release that scanned standard XML on demand (replaced by standard call refs).
         Exec("DROP TABLE IF EXISTS std_refs; DROP TABLE IF EXISTS std_scan;");
+        // 1.3.2: xpp_join reads every table relation; a covering partial index holds only those rows (~7% of members)
+        // instead of a scan of the whole members table. Built once, in a few seconds.
+        Exec("CREATE INDEX IF NOT EXISTS ix_members_relation ON members(object_id, name, info) WHERE kind = 'relation'");
     }
 
     public void Dispose() => Conn.Dispose();
