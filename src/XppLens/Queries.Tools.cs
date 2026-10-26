@@ -324,10 +324,10 @@ public sealed partial class Queries
         var from = ParseSince(since, DateTime.UtcNow);
         if (from == null) return $"cannot read since='{since}' — use e.g. 24h, 3d, 2026-10-01 or '2026-10-01 14:00'.";
         var tp = TypePattern(type);
-        var modelLike = PatOrNull(model);
+        var modelLike = ModelArg(model);
         var where = $"""
             f.mtime > $t AND md.tier >= 0
-            AND ($model IS NULL OR md.name LIKE $model ESCAPE '!' OR md.package LIKE $model ESCAPE '!') {(tp != null ? "AND o.type LIKE $tp" : "")}
+            AND xl_model($model, md.name, md.package) {(tp != null ? "AND o.type LIKE $tp" : "")}
             """;
         var args = new (string, object?)[] { ("$t", from.Value.Ticks), ("$model", modelLike), ("$tp", tp), ("$limit", limit) };
         const string from_ = "FROM files f JOIN objects o ON o.file_id = f.id JOIN models md ON md.id = f.model_id";
@@ -336,7 +336,7 @@ public sealed partial class Queries
             .Select(r => $"{Tag(r.GetString(0), r.GetString(1), r.GetInt32(2))} {r.GetInt64(3)}").ToList();
         var labels = s.Query("""
             SELECT lf.label_file, lf.lang, lf.mtime, md.package, md.name, md.tier FROM label_files lf JOIN models md ON md.id = lf.model_id
-            WHERE lf.mtime > $t AND md.tier >= 0 AND ($model IS NULL OR md.name LIKE $model ESCAPE '!' OR md.package LIKE $model ESCAPE '!')
+            WHERE lf.mtime > $t AND md.tier >= 0 AND xl_model($model, md.name, md.package)
             ORDER BY lf.mtime DESC LIMIT 50
             """, args).Select(r => $"  {new DateTime(r.GetInt64(2), DateTimeKind.Utc).ToLocalTime():MM-dd HH:mm} labels {r.GetString(0)} ({r.GetString(1)}) {Tag(r.GetString(3), r.GetString(4), r.GetInt32(5))}").ToList();
 

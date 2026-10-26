@@ -64,6 +64,9 @@ public sealed partial class Queries(IndexService svc)
     static string Pat(string q) => Esc(q).Replace('*', '%').Replace('?', '_');
     static string Like(string q) => HasWildcard(q) ? Pat(q) : $"%{Esc(q)}%";
     static string? PatOrNull(string? q) => string.IsNullOrWhiteSpace(q) ? null : Pat(q.Trim());
+
+    /// <summary>The model filter as the SQL function xl_model takes it (see Store.ModelMatches): names separated by ';', * ? wildcards.</summary>
+    static string? ModelArg(string? model) => string.IsNullOrWhiteSpace(model) ? null : model.Trim();
     static bool HasWildcard(string q) => q.Contains('*') || q.Contains('?');
 
     /// <summary>
@@ -262,7 +265,7 @@ public sealed partial class Queries(IndexService svc)
             return eq > 0 ? (Name: p[..eq].Trim(), Filter: NameDirectory.WholeName(p[(eq + 1)..].Trim())) : (Name: p.Trim(), Filter: (Regex?)null);
         }).ToList();
         var tp = TypePattern(type);
-        var args = new List<(string, object?)> { ("$tp", tp), ("$model", PatOrNull(model)) };
+        var args = new List<(string, object?)> { ("$tp", tp), ("$model", ModelArg(model)) };
         var names = SplitList(query).Where(q => q.Trim('*').Length > 0).ToList();
         if (names.Count == 0 && tp == null && string.IsNullOrWhiteSpace(model))
             return "listing properties needs a scope: a name pattern, type (e.g. entity) or model.";
@@ -272,7 +275,7 @@ public sealed partial class Queries(IndexService svc)
         var rows = s.Query($"""
             SELECT o.id, o.file_id, o.type, o.name, o.target, o.extends, o.header, o.props, f.path, md.package, md.name, md.tier
             FROM models md JOIN files f ON f.model_id = md.id JOIN objects o ON o.file_id = f.id
-            WHERE ($model IS NULL OR md.name LIKE $model ESCAPE '!' OR md.package LIKE $model ESCAPE '!')
+            WHERE xl_model($model, md.name, md.package)
               AND {nameSql} {(tp != null ? "AND o.type LIKE $tp" : "")}
             ORDER BY md.tier DESC, o.type, o.name
             """, [.. args]).Select(r => ReadObj(r)).ToList();
@@ -318,7 +321,17 @@ public sealed partial class Queries(IndexService svc)
         string? objPart = query, memPart = null;
         int sep = query.IndexOf("::", StringComparison.Ordinal);
         int sepLen = 2;
-        if (sep < 0) { sep = query.IndexOf('.'); sepLen = 1; }
+        if (sep < 0)
+        {
+            sep = query.IndexOf('.');
+            sepLen = 1;
+            // "Table.Extension.Field": the extension object is named "Table.Extension", so the member follows the
+            // last dot when the part before it is an object.
+            int last = query.LastIndexOf('.');
+            if (last > sep && !HasWildcard(query[..last])
+                && s.Scalar("SELECT 1 FROM objects WHERE name = $n LIMIT 1", ("$n", query[..last])) != null)
+                sep = last;
+        }
         if (sep >= 0)
         {
             objPart = query[..sep].Trim();
@@ -327,8 +340,8 @@ public sealed partial class Queries(IndexService svc)
             if (memPart.Length == 0) memPart = null;
         }
         var tp = TypePattern(type);
-        var modelLike = PatOrNull(model);
-        const string modelFilter = "AND ($model IS NULL OR md.name LIKE $model ESCAPE '!' OR md.package LIKE $model ESCAPE '!')";
+        var modelLike = ModelArg(model);
+        const string modelFilter = "AND xl_model($model, md.name, md.package)";
 
         // Extension objects are named "Base.Model", so a dot is not always "Object.member".
         bool dotted = sep >= 0 && sepLen == 1;
@@ -663,10 +676,12 @@ public sealed partial class Queries(IndexService svc)
     {
         if (e.Type == "AxClass")
         {
-            var wraps = s.Query("SELECT DISTINCT member FROM refs WHERE object_id = $id AND kind = 'coc' AND via = 'next' AND member IS NOT NULL ORDER BY member",
-                ("$id", e.Id)).Select(r => r.GetString(0)).ToList();
-            var of = s.Query("SELECT via, member FROM refs WHERE object_id = $id AND kind = 'coc' AND method_id = (SELECT MIN(id) FROM methods WHERE object_id = $id AND name = 'classDeclaration') LIMIT 1",
-                ("$id", e.Id)).Select(r => $"{r.GetString(0)}{(r.IsDBNull(1) ? "" : ":" + r.GetString(1))}").FirstOrDefault();
+            // file_id first: refs has no index on object_id, but one on file_id (an object lives in one file) —
+            // without it each extension class meant a scan of the whole refs table.
+            var wraps = s.Query("SELECT DISTINCT member FROM refs WHERE file_id = $fid AND object_id = $id AND kind = 'coc' AND via = 'next' AND member IS NOT NULL ORDER BY member",
+                ("$fid", e.FileId), ("$id", e.Id)).Select(r => r.GetString(0)).ToList();
+            var of = s.Query("SELECT via, member FROM refs WHERE file_id = $fid AND object_id = $id AND kind = 'coc' AND method_id = (SELECT MIN(id) FROM methods WHERE object_id = $id AND name = 'classDeclaration') LIMIT 1",
+                ("$fid", e.FileId), ("$id", e.Id)).Select(r => $"{r.GetString(0)}{(r.IsDBNull(1) ? "" : ":" + r.GetString(1))}").FirstOrDefault();
             var parts = new List<string>();
             if (of != null && !of.StartsWith("classStr", StringComparison.OrdinalIgnoreCase) && !of.StartsWith("tableStr", StringComparison.OrdinalIgnoreCase)) parts.Add(of);
             if (wraps.Count > 0) parts.Add("wraps " + string.Join(", ", wraps));
@@ -684,10 +699,36 @@ public sealed partial class Queries(IndexService svc)
     /// One or more methods. method may list several names ("a;b") of the same object; without method,
     /// objectName may list "Object.method" / "Object::method" items. match/lines return a numbered fragment.
     /// </summary>
+    /// <summary>Lines "from-to" (at most 300) of an object's XML file, numbered as in the file.</summary>
+    string FileLines(string objectName, string? type, string lines) => svc.Read(s =>
+    {
+        var m = Regex.Match(lines.Trim(), @"^(\d+)\s*-\s*(\d+)$");
+        if (!m.Success) return $"lines '{lines}': give a range like 120-180.";
+        int from = int.Parse(m.Groups[1].Value), to = int.Parse(m.Groups[2].Value);
+        if (to < from) (from, to) = (to, from);
+        to = Math.Min(to, from + 299);
+        var o = ObjectRows(s, objectName, type).FirstOrDefault();
+        if (o == null) return NotFound(s, objectName, type);
+        if (o.Compiled || !File.Exists(o.Path)) return $"{o.Type} {o.Name} {o.Tag}: no source file (compiled package).";
+        var sb = new StringBuilder($"{o.Type} {o.Name} {o.Tag}\n{o.Path}:{from}-{to}\n");
+        var methodsHere = s.Query("SELECT owner, name, start_line, end_line FROM methods WHERE object_id = $id AND start_line <= $to AND end_line >= $from ORDER BY start_line",
+                ("$id", o.Id), ("$from", from), ("$to", to))
+            .Select(r => $"{(r.IsDBNull(0) || r.GetString(0).Length == 0 ? "" : r.GetString(0) + "/")}{r.GetString(1)} L{r.GetInt32(2)}-{r.GetInt32(3)}").ToList();
+        if (methodsHere.Count > 0) sb.AppendLine("in: " + string.Join(", ", methodsHere));
+        foreach (var (no, text) in File.ReadLines(o.Path).Skip(from - 1).Take(to - from + 1).Select((t, i) => (from + i, t)))
+            sb.AppendLine($"{no,6}: {text}");
+        return Finish(sb);
+    });
+
     public string Method(string objectName, string? method, string? type, string? match = null, string? lines = null, int context = 3)
     {
         var frag = FragmentSpec.Create(match, lines, context);
         var pairs = new List<(string Obj, string Method)>();
+        if (method is "null" or "undefined") method = null;
+        // Only a line range of one object (e.g. from a build error or a grep hit): those lines of its file.
+        if (string.IsNullOrWhiteSpace(method) && !string.IsNullOrWhiteSpace(lines) && SplitList(objectName) is [var single]
+            && !single.Contains("::", StringComparison.Ordinal) && !single.Contains('.'))
+            return FileLines(single, type, lines);
         var methods = SplitList(method);
         if (methods.Count > 0)
         {
@@ -1008,7 +1049,7 @@ public sealed partial class Queries(IndexService svc)
     public string Refs(string name, string? member, string? kind, string? model, int limit) => svc.Read(s =>
     {
         limit = Math.Clamp(limit, 1, 1000);
-        var modelLike = PatOrNull(model);
+        var modelLike = ModelArg(model);
         name = name.Trim();
         string? readAs = null;
         if (string.IsNullOrWhiteSpace(member) && SplitMemberName(s, name) is ({ } objectPart, { } memberPart))
@@ -1019,7 +1060,7 @@ public sealed partial class Queries(IndexService svc)
         }
         var where = """
             r.target = $n AND ($mem IS NULL OR r.member = $mem) AND ($kind IS NULL OR r.kind = $kind)
-            AND ($model IS NULL OR md.name LIKE $model ESCAPE '!' OR md.package LIKE $model ESCAPE '!')
+            AND xl_model($model, md.name, md.package)
             """;
         var args = new (string, object?)[] { ("$n", name), ("$mem", string.IsNullOrWhiteSpace(member) ? null : member),
             ("$kind", string.IsNullOrWhiteSpace(kind) ? null : kind), ("$model", modelLike), ("$limit", limit) };

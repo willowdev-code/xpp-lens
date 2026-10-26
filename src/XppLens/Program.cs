@@ -268,7 +268,7 @@ if (cmd is "help" or "-h" or "--help")
           xpplens config --packages-dir <path> | --index-path <path>
                           --add-language pl | --remove-language pl | --languages en-US,pl
                           --display-language en-US
-                          --add-full-model XPL | --remove-full-model XPL | --full-models A,B
+                          --add-full-model Contoso | --remove-full-model Contoso | --full-models A,B
                           --add-standard-model X | --remove-standard-model X
                           --add-standard-publisher "Contoso" | --standard-publishers Microsoft
                           --index-standard true|false | --standard-code true|false

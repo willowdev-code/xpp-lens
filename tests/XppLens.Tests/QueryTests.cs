@@ -136,6 +136,38 @@ public class QueryTests(IndexFixture fx)
     }
 
     [Fact]
+    public void Model_filters_take_lists()
+    {
+        Assert.True(Store.ModelMatches("Nope;Contoso*", "ContosoCore", "ContosoCore"));
+        Assert.True(Store.ModelMatches("stdbase", "StdBase", "StdBase"));
+        Assert.False(Store.ModelMatches("Nope;Other*", "ContosoCore", "ContosoCore"));
+        Assert.True(Store.ModelMatches(null, "x", "y"));
+
+        var both = Q.Find("Demo*", "object", null, "Nope;StdBase", 40);
+        Assert.Contains("DemoCustomer", both);
+        var refs = Q.Refs("DemoCustomer", null, null, "Nope;Contoso*", 150);
+        Assert.Contains("ContosoCore", refs);
+        Assert.DoesNotContain("[StdBase", refs);
+    }
+
+    [Fact]
+    public void Find_takes_extension_dot_field()
+    {
+        // The table extension "DemoCustomer.Contoso" adds ContosoSegment_Code.
+        var res = Q.Find("DemoCustomer.Contoso.ContosoSegment_Code", null, null, null, 40);
+        Assert.Contains("DemoCustomer.Contoso.ContosoSegment_Code (field)", res);
+    }
+
+    [Fact]
+    public void Method_with_only_lines_shows_the_file()
+    {
+        var res = Q.Method("ContosoHelper", "null", null, null, "1-12", 3);
+        Assert.Contains("ContosoHelper.xml:1-12", res);
+        Assert.Contains("     1: <?xml", res);
+        Assert.Contains("lines 'x'", Q.Method("ContosoHelper", null, null, null, "x", 3));
+    }
+
+    [Fact]
     public void Table_properties_show_their_defaults()
     {
         var props = Q.Object("DemoCustomer", "table", "props", null, 0, null);

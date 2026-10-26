@@ -13,7 +13,7 @@
 .EXAMPLE
     .\install.ps1
 .EXAMPLE
-    .\install.ps1 -PackagesDir K:\AosService\PackagesLocalDirectory -Languages en-US,de -FullModels XPL,XPLCore
+    .\install.ps1 -PackagesDir K:\AosService\PackagesLocalDirectory -Languages en-US,de -FullModels ContosoCore,ContosoRetail
 
 .NOTES
     Running it again over an existing installation (an update) keeps its settings: languages and the
@@ -209,6 +209,6 @@ if ($desktop.Count -gt 0) {
     }
 }
 Say "Claude Code in a terminal / VS Code: '/mcp' -> reconnect xpp-lens, or start a new session."
-Say "Change settings later:  `"$exe`" config --add-language de --add-full-model XPL"
+Say "Change settings later:  `"$exe`" config --add-language de --add-full-model Contoso"
 Say "Index status:           `"$exe`" status"
 Say "Uninstall:              $InstallDir\uninstall.ps1"

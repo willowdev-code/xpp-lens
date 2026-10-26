@@ -65,7 +65,7 @@ public sealed partial class Queries
             FROM refs r JOIN objects so ON so.id = r.object_id JOIN files f ON f.id = r.file_id JOIN models md ON md.id = f.model_id
             LEFT JOIN methods sm ON sm.id = r.method_id
             WHERE r.target IS NULL AND r.member = $m AND r.kind IN ({kinds}) AND r.via LIKE 'ret:%'
-              AND ($model IS NULL OR md.name LIKE $model ESCAPE '!' OR md.package LIKE $model ESCAPE '!')
+              AND xl_model($model, md.name, md.package)
             ORDER BY md.tier DESC, so.name, sm.name, r.line LIMIT 5000
             """, ("$m", member), ("$model", modelLike))
             .Select(r => (Kind: r.GetString(0), Via: r.GetString(1), Line: r.GetInt32(2), Type: r.GetString(3), Obj: r.GetString(4),

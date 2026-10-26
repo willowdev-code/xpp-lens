@@ -107,7 +107,9 @@ if (-not $Pre) {
 $changelog = [IO.File]::ReadAllText((Resolve-Path 'CHANGELOG.md'))
 $sectionRx = "(?ms)^## $([regex]::Escape($Version))\b.*?(?=^## |\z)"
 $section = [regex]::Match($changelog, $sectionRx)
-if (-not $section.Success) { Fail "CHANGELOG.md has no '## $Version' section" }
+# A dry run also serves as the scan before an ordinary push to dev, so it goes on without the section.
+if (-not $section.Success -and $DryRun) { Write-Host "   WARNING: CHANGELOG.md has no '## $Version' section (needed for the release)" -ForegroundColor Yellow }
+elseif (-not $section.Success) { Fail "CHANGELOG.md has no '## $Version' section" }
 Ok "CHANGELOG section found, tag is free, $work is up to date"
 
 # ---------------------------------------------------------------- 2. version

@@ -59,7 +59,7 @@ Przydatne parametry:
 ```powershell
 .\install.ps1 -PackagesDir K:\AosService\PackagesLocalDirectory   # zamiast wykrywania
 .\install.ps1 -Languages en-US,de -DisplayLanguage de             # języki etykiet
-.\install.ps1 -FullModels XPL,XPLRetail                           # wymuszenie pełnego indeksu
+.\install.ps1 -FullModels ContosoCore,ContosoRetail                           # wymuszenie pełnego indeksu
 .\install.ps1 -StandardModels HugeIsvModel                        # zepchnięcie modelu do poziomu standardowego
 .\install.ps1 -NoStandard                                         # tylko modele własne (szybko, mały indeks)
 .\install.ps1 -First -NoBuild -NoRegister                         # tryb nieinteraktywny / CI
@@ -73,7 +73,7 @@ Nowy pakiet dystrybucyjny: `pack.ps1` (dodaj `-FrameworkDependent`, jeśli wolis
 ```powershell
 xpplens config                                   # pokaż ustawienia
 xpplens config --add-language de                 # dołóż język etykiet
-xpplens config --add-full-model XPL              # model/pakiet do pełnego indeksu
+xpplens config --add-full-model Contoso              # model/pakiet do pełnego indeksu
 xpplens config --add-standard-model ContosoIsv   # model do poziomu standardowego
 xpplens config --add-standard-publisher "Contoso"
 xpplens config --packages-dir K:\AosService\PackagesLocalDirectory
