@@ -36,6 +36,7 @@ public sealed class Store : IDisposable
         }.ToString();
         Conn = new SqliteConnection(cs);
         Conn.Open();
+        Conn.CreateFunction<string?, string?, string?, bool>("xl_model", ModelMatches, isDeterministic: true);
         if (reader)
         {
             Exec("PRAGMA busy_timeout=120000; PRAGMA temp_store=MEMORY; PRAGMA cache_size=-65536; PRAGMA mmap_size=2147483648;");
@@ -74,6 +75,25 @@ public sealed class Store : IDisposable
     }
 
     public void Dispose() => Conn.Dispose();
+
+    static readonly System.Collections.Concurrent.ConcurrentDictionary<string, System.Text.RegularExpressions.Regex[]> ModelPatterns = new();
+
+    /// <summary>
+    /// SQL function xl_model($model, md.name, md.package): the model filter of the tools. $model is null (no filter) or
+    /// one or more names separated by ';' with * and ? as wildcards, matched case-insensitively against the model
+    /// name or the package name ("Contoso;Fabrikam*").
+    /// </summary>
+    internal static bool ModelMatches(string? list, string? model, string? package)
+    {
+        if (string.IsNullOrWhiteSpace(list)) return true;
+        var patterns = ModelPatterns.GetOrAdd(list, l => l
+            .Split([';', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(p => new System.Text.RegularExpressions.Regex(
+                "^" + System.Text.RegularExpressions.Regex.Escape(p).Replace(@"\*", ".*").Replace(@"\?", ".") + "$",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant))
+            .ToArray());
+        return patterns.Any(r => (model != null && r.IsMatch(model)) || (package != null && r.IsMatch(package)));
+    }
 
     public int Exec(string sql, params (string Name, object? Value)[] args)
     {

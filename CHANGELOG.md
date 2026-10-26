@@ -5,6 +5,15 @@ All notable changes to xpp-lens (called xpp-graft up to 1.2.0). Versions follow 
 
 ## 1.3.2 — unreleased
 
+### Fixed
+- The `model` filter of `xpp_find`, `xpp_refs`, `xpp_changed` and `property=` listings took one name only: a list
+  such as `model="Contoso;Fabrikam*"` matched nothing and the answer was empty. All of them now take names separated
+  by `;` with `*` and `?`, like `xpp_grep` already did.
+- `xpp_find "Table.Extension.Field"` split the name at the first dot and found nothing; a field added in a named
+  extension (`CustTable.ContosoExtension.MyField`) is now found.
+- `xpp_method` with only `lines` (no method) returned nothing; it now shows those lines of the object's file and the
+  methods they belong to — the way to read a spot named by a build error or a grep hit.
+
 ### Changed
 - `xpp_extensions` is several times faster for objects with many extension classes (measured warm: `SalesTable`
   9.2 s → 0.5 s, `VendTable` 5.1 s → 1.8 s): the Chain of Command details of each extension class were looked up
