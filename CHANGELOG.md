@@ -3,7 +3,7 @@
 All notable changes to xpp-lens (called xpp-graft up to 1.2.0). Versions follow `<Version>` in
 `src/XppLens/XppLens.csproj`; release tags are `vX.Y.Z`.
 
-## 1.3.0 — unreleased
+## 1.3.0 — 2026-10-26
 
 ### Added
 - Setup program `xpp-lens-setup-X.Y.Z.exe` (Inno Setup): a wizard in Polish or English for the current user, no
