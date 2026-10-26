@@ -224,6 +224,20 @@ public sealed partial class Queries(IndexService svc)
                 ? items
                 : [(query, () => "nothing found (empty query)")]);
 
+    static readonly Dictionary<string, string> NoDefaults = [];
+
+    /// <summary>
+    /// Properties the XML leaves out when they have their default value, but which decide how code must use the
+    /// object (a table that is not per company has no DataAreaId to join on; a temporary table has no rows in SQL).
+    /// </summary>
+    static readonly Dictionary<string, Dictionary<string, string>> Defaults = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["AxTable"] = new() { ["SaveDataPerCompany"] = "Yes", ["TableType"] = "RegularTable" },
+    };
+
+    internal static Dictionary<string, string> PropertyDefaults(string type) =>
+        Defaults.TryGetValue(type, out var d) ? d : NoDefaults;
+
     /// <summary>"Key=Value; Key2=Value2" as stored in objects.props.</summary>
     internal static Dictionary<string, string> ParseProps(string? props)
     {
@@ -280,6 +294,7 @@ public sealed partial class Queries(IndexService svc)
                     Log.Debug($"props {o.Path}: {ex.Message}");
                 }
             }
+            foreach (var d in PropertyDefaults(o.Type)) props.TryAdd(d.Key, d.Value);
             if (wanted.Any(w => w.Filter != null && !(props.TryGetValue(w.Name, out var v) && w.Filter.IsMatch(v)))) continue;
             matched++;
             if (shown >= limit) continue;
@@ -474,9 +489,10 @@ public sealed partial class Queries(IndexService svc)
         if (rows.Count > 1)
             sb.AppendLine("same name: " + string.Join(", ", rows.Skip(1).Select(r => $"{r.Type} {r.Tag}")));
 
-        if (Show("props") && po.RootProps.Count > 0)
+        if (Show("props") && (po.RootProps.Count > 0 || PropertyDefaults(o.Type).Count > 0))
         {
-            var props = string.Join("; ", po.RootProps.Where(kv => kv.Value.Length is > 0 and < 200).Select(kv => $"{kv.Key}={kv.Value}"));
+            var props = string.Join("; ", po.RootProps.Where(kv => kv.Value.Length is > 0 and < 200).Select(kv => $"{kv.Key}={kv.Value}")
+                .Concat(PropertyDefaults(o.Type).Where(d => !po.RootProps.Any(kv => kv.Key == d.Key)).Select(d => $"{d.Key}={d.Value} (default)")));
             sb.AppendLine("props: " + WithLabels(s, Trunc(props, 900), cache));
         }
 
@@ -974,10 +990,33 @@ public sealed partial class Queries(IndexService svc)
 
     // ---------------------------------------------------------------- refs / extensions
 
+    /// <summary>
+    /// "Table.Field" / "Class::method" without a separate member, as xpp_find takes it, unless an object has that
+    /// whole name (extensions are named "Base.Model"). (null, null) when the name is not of that form.
+    /// </summary>
+    static (string? Name, string? Member) SplitMemberName(Store s, string name)
+    {
+        if (name.StartsWith('@')) return (null, null);
+        int sep = name.LastIndexOf("::", StringComparison.Ordinal);
+        int len = 2;
+        if (sep < 0) { sep = name.LastIndexOf('.'); len = 1; }
+        if (sep <= 0 || sep + len >= name.Length) return (null, null);
+        if (s.Scalar("SELECT 1 FROM objects WHERE name = $n LIMIT 1", ("$n", name)) != null) return (null, null);
+        return (name[..sep].Trim(), name[(sep + len)..].Trim());
+    }
+
     public string Refs(string name, string? member, string? kind, string? model, int limit) => svc.Read(s =>
     {
         limit = Math.Clamp(limit, 1, 1000);
         var modelLike = PatOrNull(model);
+        name = name.Trim();
+        string? readAs = null;
+        if (string.IsNullOrWhiteSpace(member) && SplitMemberName(s, name) is ({ } objectPart, { } memberPart))
+        {
+            readAs = $"(read as name={objectPart} member={memberPart})";
+            name = objectPart;
+            member = memberPart;
+        }
         var where = """
             r.target = $n AND ($mem IS NULL OR r.member = $mem) AND ($kind IS NULL OR r.kind = $kind)
             AND ($model IS NULL OR md.name LIKE $model ESCAPE '!' OR md.package LIKE $model ESCAPE '!')
@@ -1009,6 +1048,7 @@ public sealed partial class Queries(IndexService svc)
         {
             sb.AppendLine($"no references to {name}{(member != null ? "." + member : "")} in the index.");
             sb.AppendLine("(Microsoft code keeps calls, new, intrinsics, extensions and handlers only — no field reads, types or labels)");
+            if (readAs != null) sb.AppendLine(readAs);
             return Finish(sb);
         }
         sb.AppendLine($"references to {name}{(string.IsNullOrWhiteSpace(member) ? "" : "." + member)}: {string.Join(", ", summary)}");
@@ -1048,6 +1088,7 @@ public sealed partial class Queries(IndexService svc)
                 }
             }
         }
+        if (readAs != null) sb.AppendLine(readAs);
         return Finish(sb);
     });
 

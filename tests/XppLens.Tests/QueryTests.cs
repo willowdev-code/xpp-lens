@@ -125,6 +125,26 @@ public class QueryTests(IndexFixture fx)
     }
 
     [Fact]
+    public void Refs_take_table_dot_field_like_find()
+    {
+        // The same answer for name="Table.member" as for name + member; an extension named "Base.Model" stays an object.
+        var split = Q.Refs("DemoCustomer.creditMax", null, null, null, 150);
+        Assert.Contains("DemoCustomer.find().creditMax", split);
+        Assert.Contains("(read as name=DemoCustomer member=creditMax)", split);
+        Assert.Contains("(read as name=DemoCustomer member=creditMax)", Q.Refs("DemoCustomer::creditMax", null, null, null, 150));
+        Assert.DoesNotContain("read as", Q.Refs("DemoCustomer.Contoso", null, null, null, 150));
+    }
+
+    [Fact]
+    public void Table_properties_show_their_defaults()
+    {
+        var props = Q.Object("DemoCustomer", "table", "props", null, 0, null);
+        Assert.Contains("SaveDataPerCompany=Yes (default)", props);
+        Assert.Contains("TableType=RegularTable (default)", props);
+        Assert.Contains("SaveDataPerCompany=Yes", Q.Find("Demo*", null, "table", null, 40, "SaveDataPerCompany"));
+    }
+
+    [Fact]
     public void Callees_show_resolved_chains()
     {
         var res = Q.Callees("ContosoInvoiceService", "run", null);
