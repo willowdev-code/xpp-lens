@@ -3,7 +3,7 @@
 All notable changes to xpp-lens (called xpp-graft up to 1.2.0). Versions follow `<Version>` in
 `src/XppLens/XppLens.csproj`; release tags are `vX.Y.Z`.
 
-## 1.3.2 — unreleased
+## 1.3.2 — 2026-10-26
 
 ### Fixed
 - The `model` filter of `xpp_find`, `xpp_refs`, `xpp_changed` and `property=` listings took one name only: a list
