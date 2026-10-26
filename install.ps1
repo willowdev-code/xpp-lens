@@ -50,38 +50,6 @@ $ErrorActionPreference = 'Stop'
 function Say($m) { Write-Host "  $m" }
 function Head($m) { Write-Host "`n$m" -ForegroundColor Cyan }
 
-# How to start Claude Desktop again, from the path of its running process; $null when it cannot be worked out.
-function Get-ClaudeStart([string]$appPath) {
-    if ($appPath -match '\\WindowsApps\\(?<folder>[^\\]+)\\') {
-        # Store / MSIX app, started through its application id. The folder ("Claude_2.1.0.0_x64__pzs8sxrjxfjjc") gives
-        # the package family ("Claude_pzs8sxrjxfjjc"); after Claude updated itself the running folder is an older
-        # version than the installed package, so the family is matched, never the path.
-        $folder = $Matches['folder']
-        if ($folder -notmatch '^(?<name>[^_]+)_.*__(?<publisher>[^_]+)$') { return $null }
-        $family = "$($Matches['name'])_$($Matches['publisher'])"
-        $aumid = $null
-        try {
-            $aumid = (Get-StartApps -ErrorAction Stop | Where-Object { $_.AppID -like "$family!*" } | Select-Object -First 1).AppID
-        }
-        catch { }
-        if (-not $aumid) {
-            try {
-                $pkg = Get-AppxPackage -ErrorAction Stop | Where-Object { $_.PackageFamilyName -eq $family } | Select-Object -First 1
-                if ($pkg) { $aumid = "$family!" + @((Get-AppxPackageManifest $pkg).Package.Applications.Application)[0].Id }
-            }
-            catch { }
-        }
-        if ($aumid) { return "shell:AppsFolder\$aumid" }
-        return $null
-    }
-    # Per-user install: the launcher above the versioned "app-x.y.z" folders starts the current version.
-    if ($appPath -match '^(?<root>.+)\\app-[^\\]+\\[^\\]+$' -and (Test-Path (Join-Path $Matches['root'] 'claude.exe'))) {
-        return (Join-Path $Matches['root'] 'claude.exe')
-    }
-    if ($appPath -and (Test-Path $appPath)) { return $appPath }
-    return $null
-}
-
 $src = $PSScriptRoot
 if (-not (Test-Path (Join-Path $src 'bin\xpplens.exe'))) {
     throw "$src\bin\xpplens.exe not found - run install.ps1 from an unpacked xpp-lens package."
@@ -146,7 +114,7 @@ else {
         Copy-Item $f.FullName $dst -Force
     }
     Get-ChildItem (Join-Path $src 'bin') -Directory | ForEach-Object { Copy-Item $_.FullName $binDst -Recurse -Force }
-    foreach ($f in 'install.ps1', 'uninstall.ps1', 'README.md', 'README.pl.md', 'CHANGELOG.md', 'LICENSE') {
+    foreach ($f in 'install.ps1', 'uninstall.ps1', 'restart-claude.ps1', 'README.md', 'README.pl.md', 'CHANGELOG.md', 'LICENSE') {
         if (Test-Path (Join-Path $src $f)) { Copy-Item (Join-Path $src $f) $InstallDir -Force }
     }
 }
@@ -233,22 +201,8 @@ if ($desktop.Count -gt 0) {
         $restart = $answer -match '^\s*(y|yes|t|tak)\s*$'
     }
     if ($restart) {
-        # Worked out before Claude is stopped: when it cannot be started again, it is not stopped either.
-        $start = Get-ClaudeStart $desktop[0].Path
-        if (-not $start) {
-            Say "Claude Desktop could not be located for a restart - it was left running; restart it yourself to use $version."
-        }
-        else {
-            $desktop | Stop-Process -Force -ErrorAction SilentlyContinue
-            Start-Sleep -Seconds 2
-            try {
-                Start-Process $start -ErrorAction Stop
-                Say "Claude Desktop restarted."
-            }
-            catch {
-                Say "Claude Desktop was closed but did not start again ($($_.Exception.Message)) - start it from the Start menu."
-            }
-        }
+        # Shared with the setup program: works out how to start Claude before stopping it.
+        & (Join-Path $src 'restart-claude.ps1') -Version $version
     }
     else {
         Say "Claude Desktop: open sessions keep the old version until it is restarted; new sessions use $version."

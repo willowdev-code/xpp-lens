@@ -141,20 +141,75 @@ public class UpdaterTests
     public void Versions_compare_numerically()
     {
         Assert.True(Updater.ParseVersion("v1.2.10") > Updater.ParseVersion("1.2.9"));
-        Assert.Equal(new Version(1, 2, 2), Updater.ParseVersion("v1.2.2-beta"));
-        Assert.Equal(new Version(1, 2, 0), Updater.ParseVersion("1.2"));
+        Assert.Equal(new ReleaseVersion(1, 2, 2, "beta"), Updater.ParseVersion("v1.2.2-beta"));
+        Assert.Equal(new ReleaseVersion(1, 2, 0), Updater.ParseVersion("1.2"));
+        Assert.Equal(new ReleaseVersion(1, 3, 0), Updater.ParseVersion("1.3.0+5f2a9c1"));
         Assert.Null(Updater.ParseVersion("latest"));
+    }
+
+    [Fact]
+    public void Test_releases_come_before_their_final_version()
+    {
+        ReleaseVersion V(string s) => Updater.ParseVersion(s)!;
+        Assert.True(V("1.3.0-beta.1") < V("1.3.0"));
+        Assert.True(V("1.3.0-beta.1") > V("1.2.9"));
+        Assert.True(V("1.3.0-beta.10") > V("1.3.0-beta.9"));
+        Assert.True(V("1.3.0-beta.2") > V("1.3.0-beta.1"));
+        Assert.Equal("1.3.0-beta.2", V("v1.3.0-beta.2").ToString());
+        Assert.True(V("1.3.0-beta.2").IsPrerelease);
+        Assert.Equal(0, V("1.3.0").CompareTo(V("v1.3.0")));
+    }
+
+    [Fact]
+    public void Newest_release_includes_test_releases_but_not_drafts()
+    {
+        const string list = """
+            [
+              { "tag_name": "v1.2.9", "prerelease": false, "assets": [] },
+              { "tag_name": "v1.3.0-beta.2", "prerelease": true, "assets": [] },
+              { "tag_name": "v1.3.0-beta.1", "prerelease": true, "assets": [] },
+              { "tag_name": "v1.4.0", "draft": true, "assets": [] }
+            ]
+            """;
+        var newest = Updater.NewestRelease(list)!;
+        Assert.Equal("v1.3.0-beta.2", newest.Tag);
+        Assert.True(newest.Prerelease);
+
+        var withFinal = list.Replace("[\n", "[\n  { \"tag_name\": \"v1.3.0\", \"prerelease\": false, \"assets\": [] },\n").Replace("[\r\n", "[\r\n  { \"tag_name\": \"v1.3.0\", \"prerelease\": false, \"assets\": [] },\r\n");
+        Assert.Equal("v1.3.0", Updater.NewestRelease(withFinal)!.Tag);
+    }
+
+    [Fact]
+    public void Running_version_has_no_build_metadata()
+    {
+        Assert.DoesNotContain("+", Updater.Current.ToString());
+        Assert.True(Updater.Current > new ReleaseVersion(1, 0, 0));
     }
 
     [Fact]
     public void Release_json_gives_package_and_digest()
     {
         var r = Updater.ParseRelease(Release)!;
-        Assert.Equal(new Version(1, 3, 0), r.Version);
+        Assert.Equal(new ReleaseVersion(1, 3, 0), r.Version);
         Assert.Equal("xpp-lens-1.3.0.zip", r.AssetName);
         Assert.Equal("https://example.invalid/xpp-lens-1.3.0.zip", r.AssetUrl);
         Assert.Equal("abcdef0123", r.Sha256);
         Assert.Contains("- Faster status", r.Notes);
+    }
+
+    [Fact]
+    public void Release_with_a_setup_program_offers_it()
+    {
+        var r = Updater.ParseRelease("""
+            { "tag_name": "v1.3.0", "assets": [
+                { "name": "xpp-lens-1.3.0.zip", "browser_download_url": "https://example.invalid/z.zip", "digest": "sha256:AA" },
+                { "name": "xpp-lens-setup-1.3.0.exe", "browser_download_url": "https://example.invalid/s.exe", "digest": "sha256:BB" } ] }
+            """)!;
+        Assert.Equal("xpp-lens-1.3.0.zip", r.AssetName);
+        Assert.Equal(new Updater.ReleaseAsset("xpp-lens-setup-1.3.0.exe", "https://example.invalid/s.exe", "bb"), r.Setup);
+        Assert.Null(Updater.ParseRelease(Release)!.Setup);
+        Assert.Equal("/SILENT /SUPPRESSMSGBOXES /NORESTART /DIR=\"C:\\Tools\\xpp-lens\"", Updater.SetupArguments(@"C:\Tools\xpp-lens\", false));
+        Assert.EndsWith(" /RESTARTCLAUDE=1", Updater.SetupArguments(@"C:\Tools\xpp-lens", true));
     }
 
     [Fact]

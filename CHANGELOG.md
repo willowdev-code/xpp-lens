@@ -3,6 +3,31 @@
 All notable changes to xpp-lens (called xpp-graft up to 1.2.0). Versions follow `<Version>` in
 `src/XppLens/XppLens.csproj`; release tags are `vX.Y.Z`.
 
+## 1.3.0 — 2026-10-26
+
+### Added
+- Setup program `xpp-lens-setup-X.Y.Z.exe` (Inno Setup): a wizard in Polish or English for the current user, no
+  administrator rights. It finds PackagesLocalDirectory (`xpplens detect`, or choose the folder), asks for the label
+  languages and whether to index the Microsoft standard, registers xpp-lens in Claude Desktop and Claude Code and
+  offers to build the index. It puts `xpplens` on the user's PATH, adds Start menu entries (status, update the index,
+  check for updates, uninstall) and an entry in Windows' installed apps; uninstalling asks whether to remove the index.
+  An installation made by `install.ps1` (`C:\Tools\xpp-lens`) is taken over in place with its settings and index.
+- `xpplens update --install` runs the setup program of the release silently into the current installation (SHA-256
+  checked, `--restart-claude` passed on); releases without one still go through the ZIP and `install.ps1`.
+- `restart-claude.ps1`: the Claude Desktop restart of the installers, shared by `install.ps1` and the setup program.
+- Test releases: a version can first be published as `X.Y.Z-beta.N`, marked as a pre-release on GitHub.
+  `xpplens update` never offers it; `xpplens update --install --pre` installs the newest release including test
+  releases, so a new version can be tried on one machine before everyone gets it. The regular `X.Y.Z` later
+  replaces a test release through the usual `xpplens update --install`.
+- `xpplens version`, `status` and the MCP server report the full version of a test release (`1.3.0-beta.1`); versions
+  compare with test releases before their final version (`1.3.0-beta.2` < `1.3.0`).
+
+### Development
+- Work happens on the branch `dev`; `main` always holds the last regular release. `release.ps1 -Version X.Y.Z -Pre`
+  publishes a test release from `dev`; `release.ps1 -Version X.Y.Z` opens the pull request `dev` → `main`, waits
+  for its CI, merges it (merge commit), tags the merge and publishes the release, then moves `dev` to `main`.
+  CI also runs for pushes to `dev`. The release notes of a test release come from the section of its final version.
+
 ## 1.2.9 — 2026-10-14
 
 ### Fixed
