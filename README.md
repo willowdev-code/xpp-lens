@@ -42,7 +42,9 @@ powershell -ExecutionPolicy Bypass -File .\dist\xpp-lens\install.ps1 -Languages 
 ```
 
 The installer copies the files to `C:\Tools\xpp-lens`, detects `PackagesLocalDirectory` (from the AOS `web.config`
-or the folder layout), writes the configuration, registers the server in Claude Desktop and Claude Code, and finally
+or the folder layout), writes the configuration, registers the server in Claude Desktop and Claude Code, and — like
+the setup program — puts `xpplens` on your PATH, adds the Start menu entries and an entry in Windows' installed apps
+(when the setup program installed xpp-lens for you, its own entries stay), installs the skills, and finally
 builds the index (custom models take about a minute, the Microsoft standard 20–90 minutes once, depending on the disk).
 Claude may stay open: start a new session afterwards (or restart Claude Desktop) to load the server.
 

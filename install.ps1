@@ -130,6 +130,86 @@ else {
 $exe = Join-Path $InstallDir 'bin\xpplens.exe'
 Say "done: $exe"
 
+# The program folder on the user's PATH, as the setup program does: "xpplens" then works in any new terminal.
+# Read and written raw (REG_EXPAND_SZ), so entries such as %USERPROFILE%\... keep expanding.
+$binFull = (Resolve-Path $binDst).Path.TrimEnd('\')
+$envKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $true)
+try {
+    $rawPath = [string]$envKey.GetValue('Path', '', [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+    $items = @($rawPath -split ';' | Where-Object { $_ })
+    if ($items | Where-Object { [Environment]::ExpandEnvironmentVariables($_).TrimEnd('\') -ieq $binFull }) {
+        Say "already on your PATH: $binFull"
+    }
+    else {
+        $envKey.SetValue('Path', (@($items) + $binFull) -join ';', [Microsoft.Win32.RegistryValueKind]::ExpandString)
+        # Tell Explorer, so terminals opened from now on see it (WM_SETTINGCHANGE "Environment").
+        Add-Type -Namespace XppLensSetup -Name Native -MemberDefinition @'
+[DllImport("user32.dll", CharSet = CharSet.Unicode)]
+public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint msg, UIntPtr wParam, string lParam, uint flags, uint timeout, out UIntPtr result);
+'@
+        $ignored = [UIntPtr]::Zero
+        [void][XppLensSetup.Native]::SendMessageTimeout([IntPtr]0xffff, 0x1A, [UIntPtr]::Zero, 'Environment', 2, 5000, [ref]$ignored)
+        $env:Path = "$env:Path;$binFull"
+        Say "added to your PATH: $binFull (open a new terminal to use 'xpplens')"
+    }
+}
+finally {
+    $envKey.Close()
+}
+
+# Start menu entries and an entry in Windows' installed apps, as the setup program makes them. When the setup
+# program installed xpp-lens for this user, its own entries stay (they are the same, and its uninstaller owns
+# them); the setup program removes these when it takes over a folder installed by this script.
+$setupKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{B3C9E031-73CD-4356-AC30-B8EC91C3C528}_is1'
+if (Test-Path $setupKey) {
+    Say "Start menu and installed apps: kept from the setup program ($((Get-ItemProperty $setupKey).InstallLocation))"
+}
+else {
+    $pl = if ($SkillsLanguage) { $SkillsLanguage -eq 'pl' } else { (Get-UICulture).TwoLetterISOLanguageName -eq 'pl' }
+    # The setup program's names (Polish without diacritics in this ASCII script: "sprawdz" gets its z-acute here).
+    $names = if ($pl) {
+        @{ status = 'xpp-lens - status'; build = 'xpp-lens - aktualizacja indeksu'; update = "xpp-lens - sprawd$([char]0x17A) aktualizacje"
+           uninstall = 'Odinstaluj xpp-lens'; console = 'Konsola z poleceniami xpplens' }
+    }
+    else {
+        @{ status = 'xpp-lens - status'; build = 'xpp-lens - update the index'; update = 'xpp-lens - check for updates'
+           uninstall = 'Uninstall xpp-lens'; console = 'Console with the xpplens commands' }
+    }
+    $group = Join-Path ([Environment]::GetFolderPath('Programs')) 'xpp-lens'
+    if (Test-Path $group) { Remove-Item $group -Recurse -Force }
+    New-Item -ItemType Directory -Force -Path $group | Out-Null
+    $shell = New-Object -ComObject WScript.Shell
+    function New-Shortcut($name, $target, $arguments, $workDir, $description) {
+        $lnk = $shell.CreateShortcut((Join-Path $group "$name.lnk"))
+        $lnk.TargetPath = $target
+        $lnk.Arguments = $arguments
+        $lnk.WorkingDirectory = $workDir
+        $lnk.IconLocation = "$exe,0"
+        if ($description) { $lnk.Description = $description }
+        $lnk.Save()
+    }
+    New-Shortcut 'xpp-lens' $env:ComSpec "/k `"title xpp-lens & set `"PATH=$binFull;%PATH%`" & xpplens help`"" $env:USERPROFILE $names.console
+    foreach ($c in 'status', 'build', 'update') {
+        New-Shortcut $names[$c] $env:ComSpec "/k `"`"$exe`" $c`"" $InstallDir $null
+    }
+    $uninstallCmd = "-NoProfile -ExecutionPolicy Bypass -File `"$(Join-Path $InstallDir 'uninstall.ps1')`""
+    New-Shortcut $names.uninstall 'powershell.exe' $uninstallCmd $InstallDir $null
+
+    $appKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\xpp-lens'
+    New-Item -Path $appKey -Force | Out-Null
+    $appVersion = ([string](& $exe version)).Split(' ')[1]
+    $sizeKb = [int]((Get-ChildItem $InstallDir -Recurse -File | Measure-Object Length -Sum).Sum / 1KB)
+    $values = @{
+        DisplayName = 'xpp-lens'; DisplayVersion = $appVersion; Publisher = 'WillowDev'; DisplayIcon = $exe
+        InstallLocation = $dstFull; URLInfoAbout = 'https://github.com/willowdev-code/xpp-lens'
+        UninstallString = "powershell.exe $uninstallCmd"
+    }
+    foreach ($v in $values.GetEnumerator()) { Set-ItemProperty $appKey -Name $v.Key -Value $v.Value }
+    foreach ($v in 'NoModify', 'NoRepair') { New-ItemProperty $appKey -Name $v -Value 1 -PropertyType DWord -Force | Out-Null }
+    New-ItemProperty $appKey -Name EstimatedSize -Value $sizeKb -PropertyType DWord -Force | Out-Null
+    Say "Start menu entries and an entry in installed apps (xpp-lens $appVersion)"
+}
+
 Head "2/5 PackagesLocalDirectory folder"
 if (-not $PackagesDir) {
     $found = @(& $exe detect | Where-Object { $_ -match "`t" })
