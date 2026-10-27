@@ -325,17 +325,41 @@ begin
   end;
 end;
 
-{ A running xpplens.exe (an open Claude session) cannot be overwritten but can be renamed; xpplens removes *.old
-  files when it starts. Whether this is an update is decided here, before the files are copied. }
-function PrepareToInstall(var NeedsRestart: Boolean): String;
+{ A running xpplens.exe and the e_sqlite3.dll it loaded (an open Claude session) cannot be overwritten but can be
+  renamed; xpplens removes *.old files when it starts. Whether this is an update is decided here, before the files
+  are copied. }
+procedure RenameInUse(Pattern: String);
 var
-  Exe: String;
+  Bin, Stamp: String;
+  Found: TFindRec;
+  Names: TArrayOfString;
+  I: Integer;
+begin
+  Bin := ExpandConstant('{app}\bin\');
+  Stamp := GetDateTimeString('yyyymmddhhnnss', #0, #0);
+  { Names first, renames after: renaming while the folder is being listed could list a file twice. }
+  if FindFirst(Bin + Pattern, Found) then
+  try
+    repeat
+      if (Found.Attributes and FILE_ATTRIBUTE_DIRECTORY) = 0 then
+      begin
+        SetArrayLength(Names, GetArrayLength(Names) + 1);
+        Names[GetArrayLength(Names) - 1] := Found.Name;
+      end;
+    until not FindNext(Found);
+  finally
+    FindClose(Found);
+  end;
+  for I := 0 to GetArrayLength(Names) - 1 do
+    RenameFile(Bin + Names[I], Bin + Names[I] + '.' + Stamp + '.old');
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
 begin
   Result := '';
   WasUpdate := FileExists(ExpandConstant('{app}\xpplens.json'));
-  Exe := ExpandConstant('{app}\bin\xpplens.exe');
-  if FileExists(Exe) then
-    RenameFile(Exe, Exe + '.' + GetDateTimeString('yyyymmddhhnnss', #0, #0) + '.old');
+  RenameInUse('*.exe');
+  RenameInUse('*.dll');
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);

@@ -11,6 +11,12 @@ All notable changes to xpp-lens (called xpp-graft up to 1.2.0). Versions follow 
 - Start menu entry `xpp-lens`: a console that shows the command list and takes any `xpplens` command, also right
   after installing, before Explorer picks up the new PATH.
 
+### Fixed
+- `xpplens` failed to start with "Failed to determine default extraction location" when TEMP pointed to a missing
+  folder (a remote desktop session's `Temp\<n>` after a cleanup), e.g. from the Start menu entries. The SQLite library
+  now ships next to `xpplens.exe` (`bin\e_sqlite3.dll`) instead of being extracted to TEMP at every start; the setup
+  program renames it like the running EXE when an open Claude session holds it.
+
 ## 1.3.2 — 2026-10-26
 
 ### Fixed

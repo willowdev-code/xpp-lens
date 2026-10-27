@@ -48,7 +48,9 @@ if ($FrameworkDependent) {
     $publishArgs += @('--self-contained', 'false')
 }
 else {
-    $publishArgs += @('--self-contained', 'true', '-p:PublishSingleFile=true', '-p:IncludeNativeLibrariesForSelfExtract=true', '-p:EnableCompressionInSingleFile=true')
+    # Native libraries (SQLite) stay next to the EXE: bundled ones would be extracted to %TEMP% at every start, which
+    # fails when TEMP points to a missing folder (a remote desktop session's Temp\<n> after a cleanup).
+    $publishArgs += @('--self-contained', 'true', '-p:PublishSingleFile=true', '-p:IncludeNativeLibrariesForSelfExtract=false', '-p:EnableCompressionInSingleFile=true')
 }
 
 Write-Host "publishing ($(if ($FrameworkDependent) { 'requires .NET 9' } else { 'self-contained' }))..." -ForegroundColor Cyan
