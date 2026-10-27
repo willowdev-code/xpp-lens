@@ -61,6 +61,8 @@ Remove-Item (Join-Path $stage 'bin\*.pdb') -Force -ErrorAction SilentlyContinue
 foreach ($f in 'install.ps1', 'uninstall.ps1', 'restart-claude.ps1', 'README.md', 'README.pl.md', 'CHANGELOG.md', 'LICENSE') {
     Copy-Item (Join-Path $PSScriptRoot $f) $stage -Force
 }
+# Claude Code skills (one folder each): install.ps1 and the setup program copy them to ~/.claude/skills.
+Copy-Item (Join-Path $PSScriptRoot 'skills') $stage -Recurse -Force
 
 $size = [math]::Round((Get-ChildItem $stage -Recurse -File | Measure-Object Length -Sum).Sum / 1MB, 1)
 Write-Host "package: $stage ($size MB)" -ForegroundColor Cyan

@@ -72,6 +72,21 @@ if (cmd == "migrate")
     return 0;
 }
 
+if (cmd == "skills")
+{
+    // Used by install.ps1, uninstall.ps1 and the setup program: Claude Code skills from the package's skills folder.
+    var skills = Skills.Default();
+    var report = (rest.Count > 0 ? rest[0].ToLowerInvariant() : "status") switch
+    {
+        "install" => skills.Install(Opt("lang")),
+        "remove" => skills.Remove(),
+        "status" => skills.Status(),
+        var other => throw new ArgumentException($"unknown action '{other}' for 'skills' (install, remove, status)"),
+    };
+    foreach (var l in report) Console.WriteLine(l);
+    return 0;
+}
+
 var cfg = Config.Load();
 Usage.Enabled = Usage.Enabled && cfg.UsageLog;
 
@@ -303,6 +318,9 @@ if (cmd is "help" or "-h" or "--help")
           xpplens mcp                                           MCP server over stdio
           xpplens register [--desktop] [--code] [--name xpp-lens]    add to Claude config(s)
           xpplens unregister [--desktop] [--code] [--any]             (--any: also other installations)
+          xpplens skills [install [--lang en|pl]|remove|status]  Claude Code skills of the package in ~/.claude/skills
+                                                                 (a skill changed locally is kept, never overwritten;
+                                                                 --lang: the language of their texts, kept for updates)
           xpplens version
 
         options: --name value, --name=value or -name value; '--' ends the options (for an argument starting with '-')

@@ -548,6 +548,16 @@ public sealed class IndexService : IDisposable
                 sb.AppendLine(Names.Ready
                     ? $"names in memory: {TextTable.Num(Names.Count)} (wildcard searches without scanning the index)"
                     : "names in memory: being read");
+            // A silent update cannot show the setup program's warning: changed skills are reported here.
+            try
+            {
+                var kept = Skills.Default().ChangedLocally();
+                if (kept.Count > 0)
+                    sb.AppendLine($"skills changed locally (kept, updates skip them): {string.Join(", ", kept)} — 'xpplens skills'");
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
+            {
+            }
             sb.AppendLine();
 
             var full = Models.Where(m => m.Full).Select(m => m.Package == m.Name ? m.Name : $"{m.Package}/{m.Name}").ToList();

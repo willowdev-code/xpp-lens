@@ -63,9 +63,12 @@ Przydatne parametry:
 .\install.ps1 -StandardModels HugeIsvModel                        # zepchnięcie modelu do poziomu standardowego
 .\install.ps1 -NoStandard                                         # tylko modele własne (szybko, mały indeks)
 .\install.ps1 -First -NoBuild -NoRegister                         # tryb nieinteraktywny / CI
+.\install.ps1 -NoSkills                                           # bez skilli Claude Code
+.\install.ps1 -SkillsLanguage pl                                  # skille po polsku (domyślnie: język Windows)
 ```
 
-Deinstalacja: `uninstall.ps1` (usuwa wpisy MCP wskazujące na tę instalację, pyta o indeks i pliki).
+Deinstalacja: `uninstall.ps1` (usuwa wpisy MCP wskazujące na tę instalację i zainstalowane przez nią skille, o ile ich
+nie zmieniłeś, pyta o indeks i pliki).
 Nowy pakiet dystrybucyjny: `pack.ps1` (dodaj `-FrameworkDependent`, jeśli wolisz 5 MB i wymóg .NET 9).
 
 ## Konfiguracja po instalacji
@@ -174,6 +177,24 @@ Kontrolki ReferenceGroup pokazują `ref=<datasource>.<ReferenceField>`, `replGro
 i `relPath=<DataRelationPath>`. Elementy rozszerzeń menu pokazują `(under <Parent>)`, `position=<PositionType>`
 i `menuitem=<MenuItemName>`.
 
+## Skille Claude Code
+
+Paczka zawiera dwa skille oparte na narzędziach `xpp_*`, instalowane do `%USERPROFILE%\.claude\skills`:
+
+- `/xpp-ponytail` — najmniejsza kompletna zmiana w X++: najpierw konfiguracja, potem standard Microsoftu, kod
+  własnego modelu, wąskie rozszerzenie (delegat, CoC, event handler), a dopiero na końcu nowy kod. Poziomy `lite`,
+  `full`, `ultra`.
+- `/xpp-ponytail-review` — przegląd zmiany w X++: poprawność, transakcje, bezpieczeństwo, SQL przy realnym wolumenie,
+  rozszerzenia, testy i kod, którego mogłoby nie być; każde znalezisko z konkretnym przypadkiem i najmniejszą poprawką.
+
+Instalują się w języku instalacji (kreatora albo `install.ps1 -SkillsLanguage en|pl`, domyślnie w języku Windows);
+aktualizacje go zachowują. Skilla zmienionego w `.claude\skills` instalator nigdy nie nadpisze ani nie usunie: zostawia
+go, mówi o tym, a `xpplens status` go wymienia. `xpplens skills` pokazuje stan, `xpplens skills install --lang en`
+zmienia język. W kreatorze jest na nie pole wyboru (`install.ps1 -NoSkills` je pomija).
+
+Oparte na [Ponytail](https://github.com/DietrichGebert/ponytail) autorstwa Dietricha Geberta (licencja MIT), przepisane
+pod X++; nota licencyjna jest w [skills/THIRD-PARTY-NOTICES.md](skills/THIRD-PARTY-NOTICES.md).
+
 ## Statystyki użycia
 
 Każde wywołanie MCP jest dopisywane do `%LOCALAPPDATA%\xpp-lens\usage\usage-RRRRMM.jsonl` (narzędzie, argumenty,
@@ -195,6 +216,7 @@ Wyłączenie: `xpplens config --usage-log false`.
 xpplens find|object|method|callers|callees|refs|ext|scaffold|build-errors|security|join|entity|changed|grep|label …
 xpplens build [--full-only] [--std-only] [--compiled-only] [--force]
 xpplens status [--counts] [--ascii] | stats | update [--install] | detect | config | register | unregister | mcp | version
+xpplens skills [install [--lang en|pl] | remove | status]
 ```
 
 `xpplens help` wypisuje wszystkie opcje. Zmienne: `XPPLENS_CONFIG` (inna konfiguracja), `XPPLENS_VERBOSE=1`
@@ -303,6 +325,7 @@ Tagi wydań są chronione: opublikowanej wersji nie da się zmienić — poprawk
 | `xpplens update`, przejęcie xpp-graft | `Updater.cs`, `Migration.cs` |
 | automatyczne wydania | `.github\workflows\release.yml`, `release-notes.ps1`, `pack.ps1` |
 | polecenia CLI, konfiguracja, rejestracja w Claude | `Program.cs`, `Config.cs`, `Detect.cs` |
+| skille Claude Code (tekst: `SKILL.md` po angielsku, `SKILL.pl.md` po polsku — zmieniać oba) | `skills\<nazwa>\`; ich instalacja: `Skills.cs` |
 
 Pętla pracy:
 

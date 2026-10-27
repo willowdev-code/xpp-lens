@@ -63,9 +63,12 @@ Useful parameters:
 .\install.ps1 -StandardModels HugeIsvModel                        # push a model down to the standard tier
 .\install.ps1 -NoStandard                                         # custom models only (fast, small index)
 .\install.ps1 -First -NoBuild -NoRegister                         # non-interactive / CI
+.\install.ps1 -NoSkills                                           # without the Claude Code skills
+.\install.ps1 -SkillsLanguage pl                                  # skills in Polish (default: the Windows language)
 ```
 
-Uninstall: `uninstall.ps1` (removes the MCP entries that point to this installation, asks about the index and files).
+Uninstall: `uninstall.ps1` (removes the MCP entries that point to this installation and the skills it installed
+unless you changed them, asks about the index and files).
 New distribution package: `pack.ps1` (add `-FrameworkDependent` if you prefer 5 MB and a .NET 9 requirement).
 
 ## Configuration after installation
@@ -173,6 +176,24 @@ ReferenceGroup controls show `ref=<datasource>.<ReferenceField>`, `replGroup=<Re
 and `relPath=<DataRelationPath>`. Menu extension elements show `(under <Parent>)`, `position=<PositionType>`
 and `menuitem=<MenuItemName>`.
 
+## Claude Code skills
+
+The package carries two skills that build on the `xpp_*` tools, installed to `%USERPROFILE%\.claude\skills`:
+
+- `/xpp-ponytail` — the smallest complete X++ change: configuration first, then Microsoft's standard, the model's
+  own code, a narrow extension (delegate, CoC, event handler), and only then new code. Levels `lite`, `full`, `ultra`.
+- `/xpp-ponytail-review` — a review of an X++ change: correctness, transactions, security, SQL at real volume,
+  extensions, tests and code that should not exist, each finding with a concrete case and the smallest fix.
+
+They are installed in the language of the installation (the setup wizard's, or `install.ps1 -SkillsLanguage en|pl`,
+by default that of Windows); updates keep it. A skill you change in `.claude\skills` is never overwritten or removed:
+the installer keeps it and says so, and `xpplens status` lists it. `xpplens skills` shows the state,
+`xpplens skills install --lang pl` switches the language. The setup wizard has a check box for them
+(`install.ps1 -NoSkills` skips them).
+
+Based on [Ponytail](https://github.com/DietrichGebert/ponytail) by Dietrich Gebert (MIT license), rewritten for X++;
+the notice is in [skills/THIRD-PARTY-NOTICES.md](skills/THIRD-PARTY-NOTICES.md).
+
 ## Usage statistics
 
 Every MCP call is appended to `%LOCALAPPDATA%\xpp-lens\usage\usage-YYYYMM.jsonl` (tool, arguments, answer size,
@@ -194,6 +215,7 @@ Switch off with `xpplens config --usage-log false`.
 xpplens find|object|method|callers|callees|refs|ext|scaffold|build-errors|security|join|entity|changed|grep|label …
 xpplens build [--full-only] [--std-only] [--compiled-only] [--force]
 xpplens status [--counts] [--ascii] | stats | update [--install] | detect | config | register | unregister | mcp | version
+xpplens skills [install [--lang en|pl] | remove | status]
 ```
 
 `xpplens help` lists every option. Environment variables: `XPPLENS_CONFIG` (another configuration),
@@ -302,6 +324,7 @@ go into a new version.
 | `xpplens update`, taking over xpp-graft | `Updater.cs`, `Migration.cs` |
 | release automation | `.github\workflows\release.yml`, `release-notes.ps1`, `pack.ps1` |
 | CLI commands, configuration, registration in Claude | `Program.cs`, `Config.cs`, `Detect.cs` |
+| Claude Code skills (text: `SKILL.md` English, `SKILL.pl.md` Polish — change both) | `skills\<name>\`; installing them: `Skills.cs` |
 
 Work loop:
 
