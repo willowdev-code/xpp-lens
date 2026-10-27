@@ -22,7 +22,7 @@
     <AssemblyTitle>xpp-lens — X++ code index for MCP</AssemblyTitle>
     <Description>X++ (Dynamics 365 F&amp;O) code index served to AI assistants over MCP</Description>
     <Copyright>Copyright © 2026 WillowDev</Copyright>
-    <Version>1.4.0</Version>
+    <Version>1.4.1</Version>
   </PropertyGroup>
 
   <ItemGroup>
