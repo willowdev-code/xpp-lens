@@ -1,0 +1,2 @@
+# Skills are installed by SHA-256 (a changed one is kept): the same bytes on every checkout, CI included.
+skills/** text eol=lf
