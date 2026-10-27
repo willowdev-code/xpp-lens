@@ -3,6 +3,23 @@
 All notable changes to xpp-lens (called xpp-graft up to 1.2.0). Versions follow `<Version>` in
 `src/XppLens/XppLens.csproj`; release tags are `vX.Y.Z`.
 
+## 1.4.0
+
+### Added
+- Claude Code skills in the package: `/xpp-ponytail` (the smallest complete X++ change: configuration, standard,
+  the model's own code, a narrow extension, only then new code) and `/xpp-ponytail-review` (a review of an X++ change
+  with a concrete case and the smallest fix per finding), built on the `xpp_*` tools. Based on
+  [Ponytail](https://github.com/DietrichGebert/ponytail) (MIT), rewritten for X++; the notice is in
+  `skills/THIRD-PARTY-NOTICES.md`. The source of the skills is now this repository (`skills\`).
+- The setup program and `install.ps1` copy them to `%USERPROFILE%\.claude\skills`, in the language of the installation
+  (English or Polish descriptions and review headings: the wizard's language, or `install.ps1 -SkillsLanguage en|pl`,
+  by default the Windows language), kept by updates. A check box in the wizard and `install.ps1 -NoSkills` skip them.
+- A skill changed locally is never overwritten or removed: `skills-installed.json` in the installation folder keeps
+  the SHA-256 of what was installed; a changed skill is kept with a warning (the wizard shows it, `install.ps1` prints
+  it, `xpplens status` lists it after a silent update). The uninstallers remove only unchanged skills they installed.
+  A folder of that name not installed by xpp-lens is left alone unless it equals the package's copy.
+- `xpplens skills [install [--lang en|pl] | remove | status]`.
+
 ## 1.3.3
 
 ### Added

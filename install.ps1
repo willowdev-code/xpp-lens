@@ -4,8 +4,9 @@
 
 .DESCRIPTION
     Copies the files, determines the PackagesLocalDirectory folder (given or detected),
-    writes the configuration, registers the MCP server in Claude Desktop and Claude Code
-    and builds the index. The AOS repository is only ever read, never written.
+    writes the configuration, registers the MCP server in Claude Desktop and Claude Code,
+    copies the Claude Code skills (xpp-ponytail, xpp-ponytail-review) to ~/.claude/skills
+    (-NoSkills: not; -SkillsLanguage en|pl, default: the Windows language, then kept for updates) and builds the index. The AOS repository is only ever read, never written.
 
     Run it in a regular (non-elevated) PowerShell: the index is created in the
     %LOCALAPPDATA% of the user who runs the installer, and Claude must be able to write to it.
@@ -41,6 +42,9 @@ param(
     [switch]   $NoStandard,
     [switch]   $NoBuild,
     [switch]   $NoRegister,
+    [switch]   $NoSkills,
+    [ValidateSet('en', 'pl')]
+    [string]   $SkillsLanguage,
     [switch]   $DesktopOnly,
     [switch]   $CodeOnly,
     [switch]   $RestartClaude
@@ -117,6 +121,11 @@ else {
     foreach ($f in 'install.ps1', 'uninstall.ps1', 'restart-claude.ps1', 'README.md', 'README.pl.md', 'CHANGELOG.md', 'LICENSE') {
         if (Test-Path (Join-Path $src $f)) { Copy-Item (Join-Path $src $f) $InstallDir -Force }
     }
+    # The package's copy of the skills (installed to ~/.claude/skills in step 4); replaced whole, so a skill
+    # dropped from the package does not linger here.
+    $skillsDst = Join-Path $InstallDir 'skills'
+    if (Test-Path $skillsDst) { Remove-Item $skillsDst -Recurse -Force }
+    if (Test-Path (Join-Path $src 'skills')) { Copy-Item (Join-Path $src 'skills') $InstallDir -Recurse -Force }
 }
 $exe = Join-Path $InstallDir 'bin\xpplens.exe'
 Say "done: $exe"
@@ -161,7 +170,7 @@ if ($NoStandard)           { $cfgArgs += @('--index-standard', 'false') }
 & $exe @cfgArgs
 if ($LASTEXITCODE -ne 0) { throw "Configuration failed." }
 
-Head "4/5 Registering in Claude"
+Head "4/5 Registering in Claude (MCP server, skills)"
 if ($NoRegister) {
     Say "skipped (-NoRegister). Manually: `"$exe`" register"
 }
@@ -170,6 +179,21 @@ else {
     if ($DesktopOnly) { $regArgs += '--desktop' }
     if ($CodeOnly)    { $regArgs += '--code' }
     & $exe @regArgs
+}
+# Claude Code skills (xpp-ponytail): a skill changed locally is kept and reported with a warning.
+if ($NoSkills) {
+    Say "skills skipped (-NoSkills). Manually: `"$exe`" skills install"
+}
+else {
+    # Language of the skill texts: -SkillsLanguage, else kept from the last installation, else that of Windows.
+    $skillArgs = @('skills', 'install')
+    if ($SkillsLanguage) { $skillArgs += @('--lang', $SkillsLanguage) }
+    elseif (-not (Test-Path (Join-Path $InstallDir 'skills-installed.json'))) {
+        $skillArgs += @('--lang', $(if ((Get-UICulture).TwoLetterISOLanguageName -eq 'pl') { 'pl' } else { 'en' }))
+    }
+    & $exe @skillArgs | ForEach-Object {
+        if ($_ -like 'warning:*') { Write-Host "  $_" -ForegroundColor Yellow } else { Say $_ }
+    }
 }
 
 Head "5/5 Building the index"

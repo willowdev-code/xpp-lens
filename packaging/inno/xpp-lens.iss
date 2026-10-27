@@ -52,6 +52,10 @@ VersionInfoVersion={#FileVersion}
 Name: "en"; MessagesFile: "compiler:Default.isl"
 Name: "pl"; MessagesFile: "compiler:Languages\Polish.isl"
 
+[InstallDelete]
+; The package's copy of the skills is replaced whole, so a skill dropped from the package does not linger.
+Type: filesandordirs; Name: "{app}\skills"
+
 [Files]
 Source: "{#Source}\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
 
@@ -96,6 +100,11 @@ en.StdTitle=Microsoft standard code
 en.StdSub=Objects, signatures and calls of the standard models
 en.StdText=Recommended: Claude then also finds callers and extensions inside Microsoft code. The first indexing takes 20-90 minutes (in the background), later only what changed.
 en.StdOption=Index the Microsoft standard models (recommended)
+en.SkillsTitle=Claude Code skills
+en.SkillsSub=xpp-ponytail and xpp-ponytail-review
+en.SkillsText=Two skills for X++ work in Claude Code: /xpp-ponytail (the smallest complete change: configuration, standard, extension, only then new code) and /xpp-ponytail-review (a review of an X++ change). They go to .claude\skills in your user profile; a skill you change there is never overwritten.
+en.SkillsOption=Install the Claude Code skills (xpp-ponytail)
+en.SkillsKept=Skills you changed were kept and not updated:%n%n%1
 en.ConfigFailed=Saving the settings did not work:%n%n%1
 en.Registered=xpp-lens is ready. Open Claude and ask, for example: "find the method SalesTable.validateWrite".
 en.BuildNow=Build the index now (a console window shows the progress)
@@ -123,6 +132,11 @@ pl.StdTitle=Kod standardowy Microsoftu
 pl.StdSub=Obiekty, sygnatury i wywołania modeli standardowych
 pl.StdText=Zalecane: Claude znajdzie wtedy także wywołania i rozszerzenia w kodzie Microsoftu. Pierwsze indeksowanie trwa 20-90 minut (w tle), później tylko zmiany.
 pl.StdOption=Indeksuj modele standardowe Microsoftu (zalecane)
+pl.SkillsTitle=Skille Claude Code
+pl.SkillsSub=xpp-ponytail i xpp-ponytail-review
+pl.SkillsText=Dwa skille do pracy z X++ w Claude Code: /xpp-ponytail (najmniejsza kompletna zmiana: konfiguracja, standard, rozszerzenie, dopiero potem nowy kod) i /xpp-ponytail-review (przegląd zmiany X++). Trafiają do .claude\skills w profilu użytkownika; skilla, którego tam zmienisz, instalator nigdy nie nadpisze.
+pl.SkillsOption=Zainstaluj skille Claude Code (xpp-ponytail)
+pl.SkillsKept=Zmienione przez ciebie skille zostały zachowane i nie zostały zaktualizowane:%n%n%1
 pl.ConfigFailed=Nie udało się zapisać ustawień:%n%n%1
 pl.Registered=xpp-lens jest gotowy. Otwórz Claude'a i zapytaj np.: "znajdź metodę SalesTable.validateWrite".
 pl.BuildNow=Zbuduj indeks teraz (okno konsoli pokaże postęp)
@@ -141,6 +155,7 @@ var
   PkgInfo: TNewStaticText;
   LangPage: TInputQueryWizardPage;
   StdPage: TInputOptionWizardPage;
+  SkillsPage: TInputOptionWizardPage;
   Detected: Boolean;
   WasUpdate: Boolean;
   RemoveUserData: Boolean;
@@ -259,6 +274,36 @@ begin
   StdPage := CreateInputOptionPage(LangPage.ID, CustomMessage('StdTitle'), CustomMessage('StdSub'), CustomMessage('StdText'), False, False);
   StdPage.Add(CustomMessage('StdOption'));
   StdPage.Values[0] := True;
+
+  { Shown on updates too; a silent update (xpplens update --install) keeps the choice of the last installation. }
+  SkillsPage := CreateInputOptionPage(StdPage.ID, CustomMessage('SkillsTitle'), CustomMessage('SkillsSub'), CustomMessage('SkillsText'), False, False);
+  SkillsPage.Add(CustomMessage('SkillsOption'));
+  SkillsPage.Values[0] := GetPreviousData('Skills', '1') = '1';
+end;
+
+procedure RegisterPreviousData(PreviousDataKey: Integer);
+begin
+  if SkillsPage.Values[0] then
+    SetPreviousData(PreviousDataKey, 'Skills', '1')
+  else
+    SetPreviousData(PreviousDataKey, 'Skills', '0');
+end;
+
+{ The "warning:" lines of "xpplens skills install / remove" (skills the user changed, kept as they are). }
+function SkillWarnings(Output: String): String;
+var
+  Line: String;
+  P: Integer;
+begin
+  Result := '';
+  Output := Output + #10;
+  while Output <> '' do
+  begin
+    P := Pos(#10, Output);
+    Line := Trim(Copy(Output, 1, P - 1));
+    Delete(Output, 1, P);
+    if Pos('warning:', Line) = 1 then Result := Result + Trim(Copy(Line, 9, Length(Line))) + #13#10;
+  end;
 end;
 
 { Fills the folder page from "xpplens detect" (lines: path TAB packages TAB source). }
@@ -383,6 +428,14 @@ begin
   end;
   { Registration in Claude Desktop and Claude Code (an update re-registers the same path). }
   RunXpp(Exe, 'register', Output);
+  { Claude Code skills; one the user changed is kept, and said so (no message box in a silent update). }
+  if SkillsPage.Values[0] then
+  begin
+    { In the wizard's language (a silent update runs in the language of the last installation). }
+    RunXpp(Exe, 'skills install --lang ' + ActiveLanguage, Output);
+    Output := SkillWarnings(Output);
+    if (Output <> '') and not WizardSilent then MsgBox(FmtMessage(CustomMessage('SkillsKept'), [Output]), mbInformation, MB_OK);
+  end;
   { Silent update with /RESTARTCLAUDE=1 (xpplens update --install --restart-claude). }
   if ExpandConstant('{param:RESTARTCLAUDE|0}') = '1' then
     Exec('powershell.exe', '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + ExpandConstant('{app}\restart-claude.ps1') + '" -Version {#Version}',
@@ -392,10 +445,18 @@ end;
 { Before the files go: ask whether to remove the index and settings (default: keep them). After: take the program
   folder off the PATH and delete the data when asked to. }
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  Output: String;
 begin
   if CurUninstallStep = usUninstall then
+  begin
     RemoveUserData := not UninstallSilent and
-      (MsgBox(CustomMessage('RemoveData'), mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES)
+      (MsgBox(CustomMessage('RemoveData'), mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES);
+    { Only the skills xpp-lens installed and nobody changed; a changed one stays where it is. }
+    RunXpp(ExpandConstant('{app}\bin\xpplens.exe'), 'skills remove', Output);
+    Output := SkillWarnings(Output);
+    if (Output <> '') and not UninstallSilent then MsgBox(Output, mbInformation, MB_OK);
+  end
   else if CurUninstallStep = usPostUninstall then
   begin
     RemoveFromPath(ExpandConstant('{app}\bin'));

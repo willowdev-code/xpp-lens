@@ -1,9 +1,10 @@
 <#
 .SYNOPSIS
-    Removes xpp-lens: the MCP entries in Claude and, optionally, the index and program files.
+    Removes xpp-lens: the MCP entries in Claude, its Claude Code skills and, optionally, the index and program files.
 
 .DESCRIPTION
-    Only MCP entries that point to this installation are removed. The index location is read
+    Only MCP entries that point to this installation are removed, and only the skills in ~/.claude/skills that
+    xpp-lens installed and nobody changed since. The index location is read
     from the configuration (by default %LOCALAPPDATA%\xpp-lens\index); only the index files
     (xpp.db*) are deleted, never other content of that folder. Source code and build outputs
     found in the installation folder (src, dist, build, *.cs, *.csproj) are left untouched.
@@ -47,7 +48,14 @@ if ($indexFolders.Count -eq 0) { $indexFolders += Join-Path $env:LOCALAPPDATA 'x
 $indexFolders += Join-Path $InstallDir 'index'                    # older installations
 $indexFolders = @($indexFolders | Select-Object -Unique | Where-Object { Test-Path (Join-Path $_ 'xpp.db*') })
 
-if (Test-Path $exe) { & $exe unregister } else { Say "$exe not found - skipping unregistration" }
+if (Test-Path $exe) {
+    & $exe unregister
+    # Only the skills xpp-lens installed and nobody changed; a changed one stays, with a warning.
+    & $exe skills remove | ForEach-Object {
+        if ($_ -like 'warning:*') { Write-Host "  $_" -ForegroundColor Yellow } else { Say $_ }
+    }
+}
+else { Say "$exe not found - skipping unregistration and skills" }
 
 $target = [IO.Path]::GetFullPath($InstallDir).TrimEnd('\') + '\'
 Get-CimInstance Win32_Process -Filter "Name='xpplens.exe'" |

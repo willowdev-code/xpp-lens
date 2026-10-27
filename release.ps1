@@ -238,7 +238,8 @@ $archive = [IO.Compression.ZipFile]::OpenRead($zip)
 $entries = @($archive.Entries | ForEach-Object { $_.FullName })
 $archive.Dispose()
 Remove-Item $tmp -Recurse -Force
-foreach ($e in 'xpp-lens/install.ps1', 'xpp-lens/bin/xpplens.exe', 'xpp-lens/CHANGELOG.md') {
+foreach ($e in 'xpp-lens/install.ps1', 'xpp-lens/bin/xpplens.exe', 'xpp-lens/bin/e_sqlite3.dll', 'xpp-lens/CHANGELOG.md',
+        'xpp-lens/skills/xpp-ponytail/SKILL.md', 'xpp-lens/skills/xpp-ponytail-review/SKILL.md') {
     if ($entries -notcontains $e) { Fail "$asset has no $e (entries: $($entries -join ', '))" }
 }
 Ok "${asset}: SHA-256 matches, layout ok, $(if ($Pre) { 'test release' } else { 'regular release' })"

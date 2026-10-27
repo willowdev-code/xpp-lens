@@ -25,6 +25,7 @@ public sealed partial class CommandLine
         ],
         ["register"] = ["name=", "exe=", "desktop", "code"],
         ["unregister"] = ["name=", "exe=", "desktop", "code", "any"],
+        ["skills"] = ["lang="],
         ["build"] = ["full-only", "std-only", "compiled-only", "force"],
         ["status"] = ["counts", "ascii"],
         ["find"] = ["kind=", "type=", "model=", "limit=", "property="],
