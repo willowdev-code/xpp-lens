@@ -3,6 +3,14 @@
 All notable changes to xpp-lens (called xpp-graft up to 1.2.0). Versions follow `<Version>` in
 `src/XppLens/XppLens.csproj`; release tags are `vX.Y.Z`.
 
+## 1.4.1
+
+### Fixed
+- `xpplens <command> --help` stopped with "unknown option '--help'"; it now shows the help of that command (also
+  `-h` and `xpplens help <command>`).
+- `xpplens help` did not list `config --standard-models`, `config --remove-standard-publisher` and
+  `register`/`unregister --exe`. A test now checks that every command and option the program accepts is in the help.
+
 ## 1.4.0
 
 ### Added

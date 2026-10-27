@@ -42,4 +42,33 @@ public class CommandLineTests
         Assert.Equal(["-1"], grep.Positional);
         Assert.Equal("Contoso*", grep.Opt("model"));
     }
+
+    [Fact]
+    public void Help_describes_every_command_and_option()
+    {
+        // migrate is run by install.ps1 only; detect --apply is another name of --set.
+        foreach (var (command, options) in CommandLine.Known.Where(k => k.Key != "migrate"))
+        {
+            Assert.NotNull(CommandLine.HelpFor(command));
+            foreach (var option in options.Select(o => o.TrimEnd('=')).Where(o => o != "apply"))
+                Assert.True(CommandLine.HelpFor(command)!.Contains("--" + option, StringComparison.Ordinal),
+                    $"xpplens help has no --{option} for '{command}'");
+        }
+    }
+
+    [Fact]
+    public void Help_option_after_a_command_shows_that_command()
+    {
+        var cl = CommandLine.Parse(["update", "--help"]);
+        Assert.Equal("help", cl.Command);
+        Assert.Equal(["update"], cl.Positional);
+        Assert.Equal("help", CommandLine.Parse(["find", "-h"]).Command);
+        Assert.Equal("grep", CommandLine.Parse(["grep", "--", "--help"]).Command);
+
+        var update = CommandLine.HelpFor("update")!;
+        Assert.Contains("--pre", update);
+        Assert.DoesNotContain("xpplens find", update);
+        Assert.Contains("--remove-standard-publisher", CommandLine.HelpFor("config"));
+        Assert.Null(CommandLine.HelpFor("nonsense"));
+    }
 }
