@@ -18,7 +18,7 @@ Paczki instalacyjnej nie ma w repozytorium (`dist\` jest pomijany przez `.gitign
 **A. Instalator** (od 1.3.0) — pobierz `xpp-lens-setup-X.Y.Z.exe` z zakładki **Releases** i uruchom. Kreator po polsku
 albo po angielsku, dla bieżącego użytkownika, bez uprawnień administratora: wykrywa `PackagesLocalDirectory`, pyta
 o języki etykiet i o indeksowanie standardu Microsoftu, rejestruje xpp-lens w Claude i proponuje zbudowanie indeksu.
-Dopisuje `xpplens` do PATH, dodaje skróty w menu Start (status, aktualizacja indeksu, sprawdzenie aktualizacji) i wpis
+Dopisuje `xpplens` do PATH, dodaje skróty w menu Start (konsola `xpp-lens` z listą poleceń, status, aktualizacja indeksu, sprawdzenie aktualizacji) i wpis
 w „Aplikacjach” Windows. Instalację zrobioną przez `install.ps1` w `C:\Tools\xpp-lens` przejmuje w miejscu, razem
 z ustawieniami i indeksem. Program nie jest jeszcze podpisany: gdy Windows pokaże „System Windows ochronił komputer”,
 wybierz „Więcej informacji” → „Uruchom mimo to”.

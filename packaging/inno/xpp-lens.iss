@@ -30,6 +30,7 @@ DisableDirPage=yes
 DisableProgramGroupPage=yes
 DefaultGroupName=xpp-lens
 DisableReadyPage=yes
+SetupIconFile={#SourcePath}..\icon\xpplens.ico
 ; The program folder goes on the user's PATH, so "xpplens" works in any new terminal.
 ChangesEnvironment=yes
 PrivilegesRequired=lowest
@@ -56,6 +57,9 @@ Source: "{#Source}\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
 
 [Icons]
 ; Start menu: commands open in a console that stays open (xpplens commands work there too).
+; "xpp-lens" is the general one: the command list, then any xpplens command (PATH set here too,
+; in case Explorer has not picked up the new PATH yet).
+Name: "{group}\xpp-lens"; Filename: "{cmd}"; Parameters: "/k ""title xpp-lens & set ""PATH={app}\bin;%PATH%"" & xpplens help"""; WorkingDir: "{%USERPROFILE}"; IconFilename: "{app}\bin\xpplens.exe"; Comment: "{cm:IconConsole}"
 Name: "{group}\{cm:IconStatus}"; Filename: "{cmd}"; Parameters: "/k """"{app}\bin\xpplens.exe"" status"""; WorkingDir: "{app}"; IconFilename: "{app}\bin\xpplens.exe"
 Name: "{group}\{cm:IconBuild}"; Filename: "{cmd}"; Parameters: "/k """"{app}\bin\xpplens.exe"" build"""; WorkingDir: "{app}"; IconFilename: "{app}\bin\xpplens.exe"
 Name: "{group}\{cm:IconUpdate}"; Filename: "{cmd}"; Parameters: "/k """"{app}\bin\xpplens.exe"" update"""; WorkingDir: "{app}"; IconFilename: "{app}\bin\xpplens.exe"
@@ -98,6 +102,7 @@ en.BuildNow=Build the index now (a console window shows the progress)
 en.RestartClaude=Restart Claude Desktop so all its sessions use the new version (interrupts work in progress there)
 en.OpenReadme=Read how to use xpp-lens
 en.ReadmeUrl=https://github.com/willowdev-code/xpp-lens#readme
+en.IconConsole=Console with the xpplens commands
 en.IconStatus=xpp-lens - status
 en.IconBuild=xpp-lens - update the index
 en.IconUpdate=xpp-lens - check for updates
@@ -124,6 +129,7 @@ pl.BuildNow=Zbuduj indeks teraz (okno konsoli pokaże postęp)
 pl.RestartClaude=Uruchom ponownie Claude Desktop, żeby wszystkie jego sesje używały nowej wersji (przerywa trwającą tam pracę)
 pl.OpenReadme=Przeczytaj, jak używać xpp-lens
 pl.ReadmeUrl=https://github.com/willowdev-code/xpp-lens/blob/main/README.pl.md
+pl.IconConsole=Konsola z poleceniami xpplens
 pl.IconStatus=xpp-lens - status
 pl.IconBuild=xpp-lens - aktualizacja indeksu
 pl.IconUpdate=xpp-lens - sprawdź aktualizacje
@@ -319,17 +325,41 @@ begin
   end;
 end;
 
-{ A running xpplens.exe (an open Claude session) cannot be overwritten but can be renamed; xpplens removes *.old
-  files when it starts. Whether this is an update is decided here, before the files are copied. }
-function PrepareToInstall(var NeedsRestart: Boolean): String;
+{ A running xpplens.exe and the e_sqlite3.dll it loaded (an open Claude session) cannot be overwritten but can be
+  renamed; xpplens removes *.old files when it starts. Whether this is an update is decided here, before the files
+  are copied. }
+procedure RenameInUse(Pattern: String);
 var
-  Exe: String;
+  Bin, Stamp: String;
+  Found: TFindRec;
+  Names: TArrayOfString;
+  I: Integer;
+begin
+  Bin := ExpandConstant('{app}\bin\');
+  Stamp := GetDateTimeString('yyyymmddhhnnss', #0, #0);
+  { Names first, renames after: renaming while the folder is being listed could list a file twice. }
+  if FindFirst(Bin + Pattern, Found) then
+  try
+    repeat
+      if (Found.Attributes and FILE_ATTRIBUTE_DIRECTORY) = 0 then
+      begin
+        SetArrayLength(Names, GetArrayLength(Names) + 1);
+        Names[GetArrayLength(Names) - 1] := Found.Name;
+      end;
+    until not FindNext(Found);
+  finally
+    FindClose(Found);
+  end;
+  for I := 0 to GetArrayLength(Names) - 1 do
+    RenameFile(Bin + Names[I], Bin + Names[I] + '.' + Stamp + '.old');
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
 begin
   Result := '';
   WasUpdate := FileExists(ExpandConstant('{app}\xpplens.json'));
-  Exe := ExpandConstant('{app}\bin\xpplens.exe');
-  if FileExists(Exe) then
-    RenameFile(Exe, Exe + '.' + GetDateTimeString('yyyymmddhhnnss', #0, #0) + '.old');
+  RenameInUse('*.exe');
+  RenameInUse('*.dll');
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
