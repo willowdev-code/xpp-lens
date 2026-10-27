@@ -214,11 +214,11 @@ Switch off with `xpplens config --usage-log false`.
 ```
 xpplens find|object|method|callers|callees|refs|ext|scaffold|build-errors|security|join|entity|changed|grep|label …
 xpplens build [--full-only] [--std-only] [--compiled-only] [--force]
-xpplens status [--counts] [--ascii] | stats | update [--install] | detect | config | register | unregister | mcp | version
+xpplens status [--counts] [--ascii] | stats | update [--install [--restart-claude]] [--pre] | detect | config | register | unregister | mcp | version
 xpplens skills [install [--lang en|pl] | remove | status]
 ```
 
-`xpplens help` lists every option. Environment variables: `XPPLENS_CONFIG` (another configuration),
+`xpplens help` lists every option; `xpplens <command> --help` (or `xpplens help <command>`) only those of one command. Environment variables: `XPPLENS_CONFIG` (another configuration),
 `XPPLENS_VERBOSE=1` (SQL timings on stderr), `XPPLENS_TIMING=1` (total time of a CLI query).
 
 ## Development

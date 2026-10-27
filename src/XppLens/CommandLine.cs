@@ -9,7 +9,7 @@ namespace XppLens;
 public sealed partial class CommandLine
 {
     // "name=" takes a value, "name" is a switch.
-    static readonly Dictionary<string, string[]> Known = new(StringComparer.OrdinalIgnoreCase)
+    internal static readonly Dictionary<string, string[]> Known = new(StringComparer.OrdinalIgnoreCase)
     {
         ["update"] = ["install", "restart-claude", "pre"],
         ["migrate"] = ["from=", "config="],
@@ -61,6 +61,14 @@ public sealed partial class CommandLine
     /// <exception cref="ArgumentException">An option the command does not know, or one without its value.</exception>
     public static CommandLine Parse(string[] args)
     {
+        // "xpplens <command> --help" (or -h): the help of that command, as "xpplens help <command>".
+        var end = Array.IndexOf(args, "--");
+        if (args.Length > 1 && args.Take(end < 0 ? args.Length : end).Skip(1).Any(a => a is "--help" or "-h" or "-?"))
+        {
+            var help = new CommandLine("help");
+            help.Positional.Add(args[0].ToLowerInvariant());
+            return help;
+        }
         var cl = new CommandLine(args.Length > 0 ? args[0].ToLowerInvariant() : "help");
         // help, version and unknown commands: no option checking (an unknown command fails on its own).
         Known.TryGetValue(cl.Command, out var spec);
@@ -107,4 +115,84 @@ public sealed partial class CommandLine
         _values.TryGetValue(name, out var q) && q.Count > 0 ? q.Dequeue() : null;
 
     public bool Flag(string name) => _switches.Contains(name);
+
+    /// <summary>
+    /// The lines of <see cref="HelpText"/> about one command (its usage lines with their continuations) and the
+    /// options note; null for a command the help does not describe.
+    /// </summary>
+    public static string? HelpFor(string command)
+    {
+        var lines = HelpText.Replace("\r", "").Split('\n');
+        var picked = new List<string>();
+        var inside = false;
+        foreach (var line in lines)
+        {
+            var trimmed = line.TrimStart();
+            if (trimmed.StartsWith("xpplens ", StringComparison.Ordinal) && line.StartsWith("  xpplens", StringComparison.Ordinal))
+                inside = trimmed == $"xpplens {command}" || trimmed.StartsWith($"xpplens {command} ", StringComparison.Ordinal);
+            else if (inside && !line.StartsWith("   ", StringComparison.Ordinal))
+                inside = false;
+            if (inside) picked.Add(line);
+        }
+        if (picked.Count == 0) return null;
+        picked.Add("");
+        picked.AddRange(lines.Where(l => l.StartsWith("options:", StringComparison.Ordinal)));
+        return string.Join(Environment.NewLine, picked);
+    }
+
+    /// <summary>The text of "xpplens help"; CommandLineTests checks that every command and option in Known is in it.</summary>
+    public const string HelpText = """
+    xpplens — X++ code index (D365 F&O) · WillowDev
+
+      xpplens detect [--set [--first]]                     find PackagesLocalDirectory on this machine
+      xpplens config                                       show settings
+      xpplens config --packages-dir <path> | --index-path <path>
+                      --add-language pl | --remove-language pl | --languages en-US,pl
+                      --display-language en-US
+                      --add-full-model Contoso | --remove-full-model Contoso | --full-models A,B
+                      --add-standard-model X | --remove-standard-model X | --standard-models A,B
+                      --add-standard-publisher "Contoso" | --remove-standard-publisher "Contoso"
+                      --standard-publishers Microsoft
+                      --index-standard true|false | --standard-code true|false
+                      --rescan-seconds 300 | --usage-log true|false
+      xpplens build [--full-only] [--std-only] [--compiled-only] [--force]   build / update the index
+                    (--std-only also switches indexStandard on when an installation was made without it)
+      xpplens status [--counts] [--ascii]                    --counts: also count references and labels (slow on a cold disk)
+                                                             --ascii: frames from +-| (automatic when redirected)
+      xpplens update [--install [--restart-claude]] [--pre]  check GitHub for a newer release; --install downloads,
+                                                             verifies (SHA-256) and installs it, keeping settings and index
+                                                             (Claude may stay open; --restart-claude restarts Claude Desktop
+                                                             at the end without asking); --pre: test releases too
+      xpplens stats [--days 7] [--top 10]                   tokens, time and empty answers of MCP calls
+      xpplens find <query[;query…]> [--kind any|object|method|field] [--type t] [--model m] [--limit n]
+                   [--property "Name[;Name2]" | "Name=*value*"]   list root properties of the matching objects
+      xpplens object <name[;name…]> [--type t] [--sections list] [--parent control] [--depth n] [--filter *text*]
+      xpplens method <object> [<method[;method…]>] [--type t] [--match regex] [--lines from-to] [--context n]
+      xpplens callers <object> <method> [--depth n] [--limit n] [--standard true|false]
+      xpplens callees <object> <method> [--type t]
+      xpplens refs <name> [--member m] [--kind k] [--model m] [--limit n]
+      xpplens ext <name>
+      xpplens scaffold coc|event|delegate|pre|post <object> <member> [--element ds|ds.field|control] [--class name] [--type t]
+      xpplens build-errors [--model m] [--severity error|warning|all] [--limit n]
+                      (newest of the model build and the project build, with objects not compiled since)
+      xpplens security <menuitem|form|privilege|duty|role> [--type t] [--limit n]
+      xpplens join <fromTable> <toTable> [--hops n] [--limit n]
+      xpplens entity <entity|publicName|table> [--sections list] [--limit n]
+      xpplens changed [--since 24h|3d|2026-10-01|build] [--model m] [--type t] [--limit n]
+                      (--since build: objects changed after the package's last build, i.e. not compiled yet)
+      xpplens grep <regex> [--model m] [--type t] [--object o] [--standard] [--limit n]
+      xpplens label <@id|text> [--lang l] [--limit n]
+      xpplens mcp                                           MCP server over stdio
+      xpplens register [--desktop] [--code] [--name xpp-lens] [--exe path]   add to Claude config(s)
+                                                             (--exe: another xpplens.exe than this one)
+      xpplens unregister [--desktop] [--code] [--name xpp-lens] [--exe path] [--any]
+                                                             (--any: also entries of other installations)
+      xpplens skills [install [--lang en|pl]|remove|status]  Claude Code skills of the package in ~/.claude/skills
+                                                             (a skill changed locally is kept, never overwritten;
+                                                             --lang: the language of their texts, kept for updates)
+      xpplens version
+
+    options: --name value, --name=value or -name value; '--' ends the options (for an argument starting with '-')
+    config: xpplens.json next to the executable or in a parent folder (or XPPLENS_CONFIG)
+    """;
 }

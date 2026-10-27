@@ -215,11 +215,11 @@ Wyłączenie: `xpplens config --usage-log false`.
 ```
 xpplens find|object|method|callers|callees|refs|ext|scaffold|build-errors|security|join|entity|changed|grep|label …
 xpplens build [--full-only] [--std-only] [--compiled-only] [--force]
-xpplens status [--counts] [--ascii] | stats | update [--install] | detect | config | register | unregister | mcp | version
+xpplens status [--counts] [--ascii] | stats | update [--install [--restart-claude]] [--pre] | detect | config | register | unregister | mcp | version
 xpplens skills [install [--lang en|pl] | remove | status]
 ```
 
-`xpplens help` wypisuje wszystkie opcje. Zmienne: `XPPLENS_CONFIG` (inna konfiguracja), `XPPLENS_VERBOSE=1`
+`xpplens help` wypisuje wszystkie opcje; `xpplens <polecenie> --help` (albo `xpplens help <polecenie>`) tylko opcje jednego polecenia. Zmienne: `XPPLENS_CONFIG` (inna konfiguracja), `XPPLENS_VERBOSE=1`
 (czasy zapytań SQL na stderr), `XPPLENS_TIMING=1` (łączny czas zapytania w CLI).
 
 ## Rozwój narzędzia

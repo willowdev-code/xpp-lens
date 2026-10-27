@@ -275,57 +275,7 @@ if (cmd is "register" or "unregister")
 
 if (cmd is "help" or "-h" or "--help")
 {
-    Console.WriteLine("""
-        xpplens — X++ code index (D365 F&O) · WillowDev
-
-          xpplens detect [--set [--first]]                     find PackagesLocalDirectory on this machine
-          xpplens config                                       show settings
-          xpplens config --packages-dir <path> | --index-path <path>
-                          --add-language pl | --remove-language pl | --languages en-US,pl
-                          --display-language en-US
-                          --add-full-model Contoso | --remove-full-model Contoso | --full-models A,B
-                          --add-standard-model X | --remove-standard-model X
-                          --add-standard-publisher "Contoso" | --standard-publishers Microsoft
-                          --index-standard true|false | --standard-code true|false
-                          --rescan-seconds 300 | --usage-log true|false
-          xpplens build [--full-only] [--std-only] [--compiled-only] [--force]   build / update the index
-                        (--std-only also switches indexStandard on when an installation was made without it)
-          xpplens status [--counts] [--ascii]                    --counts: also count references and labels (slow on a cold disk)
-                                                                 --ascii: frames from +-| (automatic when redirected)
-          xpplens update [--install [--restart-claude]] [--pre]  check GitHub for a newer release; --install downloads,
-                                                                 verifies (SHA-256) and installs it, keeping settings and index
-                                                                 (Claude may stay open; --restart-claude restarts Claude Desktop
-                                                                 at the end without asking); --pre: test releases too
-          xpplens stats [--days 7] [--top 10]                   tokens, time and empty answers of MCP calls
-          xpplens find <query[;query…]> [--kind any|object|method|field] [--type t] [--model m] [--limit n]
-                       [--property "Name[;Name2]" | "Name=*value*"]   list root properties of the matching objects
-          xpplens object <name[;name…]> [--type t] [--sections list] [--parent control] [--depth n] [--filter *text*]
-          xpplens method <object> [<method[;method…]>] [--type t] [--match regex] [--lines from-to] [--context n]
-          xpplens callers <object> <method> [--depth n] [--limit n] [--standard true|false]
-          xpplens callees <object> <method> [--type t]
-          xpplens refs <name> [--member m] [--kind k] [--model m] [--limit n]
-          xpplens ext <name>
-          xpplens scaffold coc|event|delegate|pre|post <object> <member> [--element ds|ds.field|control] [--class name] [--type t]
-          xpplens build-errors [--model m] [--severity error|warning|all] [--limit n]
-                          (newest of the model build and the project build, with objects not compiled since)
-          xpplens security <menuitem|form|privilege|duty|role> [--type t] [--limit n]
-          xpplens join <fromTable> <toTable> [--hops n] [--limit n]
-          xpplens entity <entity|publicName|table> [--sections list] [--limit n]
-          xpplens changed [--since 24h|3d|2026-10-01|build] [--model m] [--type t] [--limit n]
-                          (--since build: objects changed after the package's last build, i.e. not compiled yet)
-          xpplens grep <regex> [--model m] [--type t] [--object o] [--standard] [--limit n]
-          xpplens label <@id|text> [--lang l] [--limit n]
-          xpplens mcp                                           MCP server over stdio
-          xpplens register [--desktop] [--code] [--name xpp-lens]    add to Claude config(s)
-          xpplens unregister [--desktop] [--code] [--any]             (--any: also other installations)
-          xpplens skills [install [--lang en|pl]|remove|status]  Claude Code skills of the package in ~/.claude/skills
-                                                                 (a skill changed locally is kept, never overwritten;
-                                                                 --lang: the language of their texts, kept for updates)
-          xpplens version
-
-        options: --name value, --name=value or -name value; '--' ends the options (for an argument starting with '-')
-        config: xpplens.json next to the executable or in a parent folder (or XPPLENS_CONFIG)
-        """);
+    Console.WriteLine(rest.Count > 0 && CommandLine.HelpFor(rest[0]) is { } one ? one : CommandLine.HelpText);
     return 0;
 }
 
