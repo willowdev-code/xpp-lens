@@ -3,6 +3,17 @@
 All notable changes to xpp-lens (called xpp-graft up to 1.2.0). Versions follow `<Version>` in
 `src/XppLens/XppLens.csproj`; release tags are `vX.Y.Z`.
 
+## 1.4.2
+
+### Fixed
+- An installation by `install.ps1` (the ZIP package, and every update from a version before 1.3.0) left `xpplens`
+  off the PATH ("The term 'xpplens' is not recognized"), with no Start menu entries and no entry in Windows' installed
+  apps. `install.ps1` now does what the setup program does: the program folder on the user's PATH (kept as
+  `REG_EXPAND_SZ`, so `%VAR%` entries keep working; new terminals see it at once), the same Start menu entries with
+  the icon, and an installed-apps entry that runs `uninstall.ps1`. When the setup program installed xpp-lens for the
+  user, its entries stay; the setup program replaces those of `install.ps1` when it takes a folder over.
+  `uninstall.ps1` removes the PATH entry, and the Start menu and installed-apps entries `install.ps1` made.
+
 ## 1.4.1
 
 ### Fixed

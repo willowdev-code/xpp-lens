@@ -57,6 +57,32 @@ if (Test-Path $exe) {
 }
 else { Say "$exe not found - skipping unregistration and skills" }
 
+# The program folder off the user's PATH (install.ps1 and the setup program put it there).
+$binFull = [IO.Path]::GetFullPath((Join-Path $InstallDir 'bin')).TrimEnd('\')
+$envKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $true)
+try {
+    $rawPath = [string]$envKey.GetValue('Path', '', [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+    $items = @($rawPath -split ';' | Where-Object { $_ })
+    $kept = @($items | Where-Object { [Environment]::ExpandEnvironmentVariables($_).TrimEnd('\') -ine $binFull })
+    if ($kept.Count -ne $items.Count) {
+        $envKey.SetValue('Path', $kept -join ';', [Microsoft.Win32.RegistryValueKind]::ExpandString)
+        Say "removed from your PATH: $binFull"
+    }
+}
+finally {
+    $envKey.Close()
+}
+
+# The Start menu entries and the installed-apps entry made by install.ps1 (the setup program's own go with its
+# uninstaller).
+$appKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\xpp-lens'
+if ((Test-Path $appKey) -and ([string](Get-ItemProperty $appKey).InstallLocation).TrimEnd('\') -ieq [IO.Path]::GetFullPath($InstallDir).TrimEnd('\')) {
+    Remove-Item $appKey -Recurse -Force
+    $group = Join-Path ([Environment]::GetFolderPath('Programs')) 'xpp-lens'
+    if (Test-Path $group) { Remove-Item $group -Recurse -Force }
+    Say "removed the Start menu entries and the entry in installed apps"
+}
+
 $target = [IO.Path]::GetFullPath($InstallDir).TrimEnd('\') + '\'
 Get-CimInstance Win32_Process -Filter "Name='xpplens.exe'" |
     Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($target, [StringComparison]::OrdinalIgnoreCase) } |

@@ -55,6 +55,8 @@ Name: "pl"; MessagesFile: "compiler:Languages\Polish.isl"
 [InstallDelete]
 ; The package's copy of the skills is replaced whole, so a skill dropped from the package does not linger.
 Type: filesandordirs; Name: "{app}\skills"
+; Start menu entries of an earlier installation (install.ps1 names them in its own language): made again below.
+Type: filesandordirs; Name: "{group}"
 
 [Files]
 Source: "{#Source}\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
@@ -414,6 +416,8 @@ var
 begin
   if CurStep <> ssPostInstall then Exit;
   Exe := ExpandConstant('{app}\bin\xpplens.exe');
+  { The installed-apps entry of install.ps1 (taken over here): this program's own entry replaces it. }
+  RegDeleteKeyIncludingSubkeys(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\xpp-lens');
   if not WasUpdate then
   begin
     Langs := Trim(LangPage.Values[0]);
